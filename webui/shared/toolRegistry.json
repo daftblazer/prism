@@ -1,0 +1,276 @@
+[
+  {
+    "id": "check_vfr",
+    "name": "Check VFR",
+    "description": "Check if a video is constant or variable frame rate using mediainfo/ffprobe.",
+    "category": "analysis",
+    "mode": "read-only",
+    "script": "analyze-vfr.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" }
+    ]
+  },
+  {
+    "id": "mux_in_english",
+    "name": "Mux In English",
+    "description": "Extract English audio/subs from one set of MKVs and mux into another.",
+    "category": "muxing",
+    "mode": "output",
+    "script": "mux-english.sh",
+    "envVars": [
+      { "name": "ENG_DIR", "label": "English Source Directory", "type": "path", "default": "" },
+      { "name": "REMUX_DIR", "label": "Remux Directory", "type": "path", "default": "" },
+      { "name": "OUT_DIR", "label": "Output Directory", "type": "path", "default": "" },
+      { "name": "SEASON", "label": "Season Code", "type": "string", "default": "S01" },
+      { "name": "IMPORT_MODE", "label": "Import Mode (a=audio, s=subs, b=both)", "type": "string", "default": "b" },
+      { "name": "REMOVE_REMUX_SUBS", "label": "Remove Existing Remux Subs", "type": "boolean", "default": "0" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "swap_audio_order",
+    "name": "Swap Audio Order",
+    "description": "Reorder audio tracks per file (default swaps first two tracks).",
+    "category": "audio",
+    "mode": "in-place",
+    "script": "swap-audio-order.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" },
+      { "name": "SWAP_ORDER", "label": "Swap Order (comma-separated track indices)", "type": "string", "default": "" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "swap_subtitle_order",
+    "name": "Swap Subtitle Order",
+    "description": "Reorder subtitle tracks per file (default swaps first two tracks).",
+    "category": "subtitles",
+    "mode": "in-place",
+    "script": "swap-subtitle-order.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" },
+      { "name": "SWAP_ORDER", "label": "Swap Order (comma-separated track indices)", "type": "string", "default": "" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "compare_runtimes",
+    "name": "Compare Runtimes",
+    "description": "Compare runtimes between Input and Mux episodes, showing per-episode differences.",
+    "category": "analysis",
+    "mode": "read-only",
+    "script": "compare-runtimes.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "./Input" },
+      { "name": "ENG_DIR", "label": "English/Mux Directory", "type": "path", "default": "./Mux" }
+    ]
+  },
+  {
+    "id": "analyze_color",
+    "name": "Analyze Color",
+    "description": "Analyze video color metadata: color space, primaries, transfer, range, and HDR/DV info.",
+    "category": "analysis",
+    "mode": "read-only",
+    "script": "analyze-color.sh",
+    "envVars": [
+      { "name": "SOURCE_FILE", "label": "Source File", "type": "file", "default": "" }
+    ]
+  },
+  {
+    "id": "shift_audio_offset",
+    "name": "Shift Audio Offset",
+    "description": "Shift audio tracks by a specified offset in milliseconds.",
+    "category": "audio",
+    "mode": "in-place",
+    "script": "shift-audio-offset.sh",
+    "envVars": [
+      { "name": "OUT_DIR", "label": "Directory", "type": "path", "default": "./Output" },
+      { "name": "TRACK_IDS", "label": "Audio Track IDs (comma-separated, blank=all)", "type": "string", "default": "" },
+      { "name": "OFFSET_MS", "label": "Offset (ms, positive=later, negative=earlier)", "type": "number", "default": "0" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "shift_subtitles_offset",
+    "name": "Shift Subtitles Offset",
+    "description": "Shift subtitle tracks by a specified offset in milliseconds.",
+    "category": "subtitles",
+    "mode": "in-place",
+    "script": "shift-subtitle-offset.sh",
+    "envVars": [
+      { "name": "OUT_DIR", "label": "Directory", "type": "path", "default": "./Output" },
+      { "name": "TRACK_IDS", "label": "Subtitle Track IDs (comma-separated, blank=all)", "type": "string", "default": "" },
+      { "name": "OFFSET_MS", "label": "Offset (ms, positive=later, negative=earlier)", "type": "number", "default": "0" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "mux_commentary",
+    "name": "Mux Commentary",
+    "description": "Extract commentary track from one set of MKVs and mux into another.",
+    "category": "muxing",
+    "mode": "output",
+    "script": "mux-commentary.sh",
+    "envVars": [
+      { "name": "ENG_DIR", "label": "English Source Directory", "type": "path", "default": "" },
+      { "name": "REMUX_DIR", "label": "Remux Directory", "type": "path", "default": "" },
+      { "name": "OUT_DIR", "label": "Output Directory", "type": "path", "default": "" },
+      { "name": "SEASON", "label": "Season Code", "type": "string", "default": "S02" },
+      { "name": "COMMENTARY_AUDIO_INDEX", "label": "Commentary Audio Index", "type": "number", "default": "2" },
+      { "name": "COMMENTARY_TRACK_NAME", "label": "Commentary Track Name", "type": "string", "default": "English Commentary" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "rename_chapters",
+    "name": "Rename Chapters",
+    "description": "Rename all chapter titles sequentially to 'Chapter 01', 'Chapter 02', etc.",
+    "category": "metadata",
+    "mode": "in-place",
+    "script": "rename-chapters.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "rename_tracks",
+    "name": "Rename Tracks",
+    "description": "Rename audio tracks with language-aware pretty names and set video track name.",
+    "category": "metadata",
+    "mode": "in-place",
+    "script": "rename-tracks.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" },
+      { "name": "VIDEO_NAME", "label": "Video Track Name", "type": "string", "default": "" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "rename_subtitles",
+    "name": "Rename Subtitles",
+    "description": "Set consistent subtitle track names. Requires pipe-delimited SUB_NAMES for each track.",
+    "category": "subtitles",
+    "mode": "in-place",
+    "script": "rename-subtitles.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" },
+      { "name": "SUB_NAMES", "label": "Subtitle Names (pipe-delimited, e.g. 'English Dialogue|Signs/Songs')", "type": "string", "default": "" }
+    ]
+  },
+  {
+    "id": "set_default_audio",
+    "name": "Set Default Audio Track",
+    "description": "Choose which audio track should be the default across all MKVs in a directory.",
+    "category": "audio",
+    "mode": "in-place",
+    "script": "set-default-audio.sh",
+    "envVars": [
+      { "name": "TARGET_DIR", "label": "Target Directory", "type": "path", "default": "Output" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
+      { "name": "AUDIO_CHOICE", "label": "Audio Track Number (1-based)", "type": "number", "default": "" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "set_default_subtitle",
+    "name": "Set Default Subtitle Track",
+    "description": "Choose which subtitle track should be the default across all MKVs in a directory.",
+    "category": "subtitles",
+    "mode": "in-place",
+    "script": "set-default-subtitle.sh",
+    "envVars": [
+      { "name": "TARGET_DIR", "label": "Target Directory", "type": "path", "default": "Output" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
+      { "name": "SUB_CHOICE", "label": "Subtitle Track Number (1-based)", "type": "number", "default": "" },
+      { "name": "SET_FORCED", "label": "Mark Track as Forced", "type": "boolean", "default": "0" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "rename_files",
+    "name": "Rename Files",
+    "description": "Rename episode files with configurable prefix and suffix tags.",
+    "category": "release",
+    "mode": "in-place",
+    "script": "rename-files.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" },
+      { "name": "PREFIX", "label": "Filename Prefix (e.g. [GroupName])", "type": "string", "default": "" },
+      { "name": "SUFFIX", "label": "Filename Suffix (e.g. [BD][1080p][AV1])", "type": "string", "default": "" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "strip_compat_audio",
+    "name": "Strip Compatibility Audio",
+    "description": "Remove compatibility audio tracks, keeping only high-quality ones and commentary.",
+    "category": "audio",
+    "mode": "output",
+    "script": "strip-compat-audio.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
+      { "name": "COMPAT_REGEX", "label": "Compatibility Track Regex", "type": "string", "default": "" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "keep_japanese_audio",
+    "name": "Keep Japanese Audio Only",
+    "description": "Keep only Japanese audio tracks, preserving video, subs, chapters, and attachments.",
+    "category": "filtering",
+    "mode": "output",
+    "script": "keep-japanese-audio.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Input" },
+      { "name": "OUTPUT_DIR", "label": "Output Directory", "type": "path", "default": "Output" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
+    "id": "generate_release_md",
+    "name": "Generate Release Markdown",
+    "description": "Generate a release info markdown file from sample MKV metadata.",
+    "category": "release",
+    "mode": "output",
+    "script": "generate-release-md.sh",
+    "envVars": [
+      { "name": "OUTPUT_DIR", "label": "MKV Directory", "type": "path", "default": "Output" },
+      { "name": "SAMPLE_FILE", "label": "Sample MKV File (optional)", "type": "string", "default": "" },
+      { "name": "OUT_MD", "label": "Output Markdown Filename", "type": "string", "default": "release.md" }
+    ]
+  },
+  {
+    "id": "generate_screenshots",
+    "name": "Generate Screenshots",
+    "description": "Generate evenly-spaced screenshots from all MKVs in a directory.",
+    "category": "release",
+    "mode": "output",
+    "script": "generate-screenshots.sh",
+    "envVars": [
+      { "name": "OUTPUT_DIR", "label": "MKV Directory", "type": "path", "default": "Output" },
+      { "name": "SHOT_DIR", "label": "Screenshot Output Directory", "type": "string", "default": "Screenshots" },
+      { "name": "SHOT_COUNT", "label": "Screenshots Per File", "type": "number", "default": "8" },
+      { "name": "SHOT_FMT", "label": "Image Format", "type": "string", "default": "png" }
+    ]
+  },
+  {
+    "id": "generate_sample",
+    "name": "Generate Sample",
+    "description": "Extract a sample clip from an MKV file, preserving all streams.",
+    "category": "release",
+    "mode": "output",
+    "script": "generate-sample.sh",
+    "envVars": [
+      { "name": "SOURCE_FILE", "label": "Source File", "type": "file", "default": "" },
+      { "name": "SAMPLE_DIR", "label": "Sample Output Directory", "type": "path", "default": "" },
+      { "name": "DURATION", "label": "Sample Duration (seconds)", "type": "number", "default": "60" },
+      { "name": "START_TIME", "label": "Start Time (seconds, blank=auto)", "type": "string", "default": "" }
+    ]
+  }
+]

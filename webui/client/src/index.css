@@ -1,0 +1,293 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════
+   NERV UI v2.1 — Design Tokens & CRT Effects
+   Adapted from https://github.com/TheGreatGildo/nerv-ui
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  --void:             #000000;
+  --void-warm:        #080807;
+  --void-panel:       #0C0C0A;
+  --void-raised:      #111110;
+
+  --nerv-orange:      #FF9830;
+  --nerv-orange-dim:  #C87020;
+  --nerv-orange-hot:  #FFCC50;
+  --nerv-orange-fill: rgba(255, 152, 48, 0.08);
+
+  --data-green:       #50FF50;
+  --data-green-dim:   #30BB30;
+  --data-green-faint: rgba(80, 255, 80, 0.06);
+  --data-green-fill:  rgba(80, 255, 80, 0.1);
+
+  --wire-cyan:        #20F0FF;
+  --wire-cyan-dim:    #10A0B0;
+  --wire-cyan-glow:   rgba(32, 240, 255, 0.12);
+
+  --alert-red:        #FF3030;
+  --alert-red-dim:    #CC2020;
+  --alert-red-hot:    #FF5050;
+  --alert-red-fill:   rgba(255, 48, 48, 0.15);
+
+  --thermal-yellow:   #FFE820;
+  --thermal-magenta:  #F030C0;
+  --thermal-blue:     #3060F0;
+
+  --steel:            #D8D8D0;
+  --steel-dim:        #888880;
+  --steel-faint:      rgba(200, 200, 192, 0.06);
+  --steel-line:       rgba(200, 200, 192, 0.12);
+
+  --font-mincho:      'Shippori Mincho B1', 'YuMincho', 'Hiragino Mincho ProN', serif;
+  --font-title:       'Noto Serif Display', 'Times New Roman', serif;
+  --font-sys:         'JetBrains Mono', 'Cascadia Mono', 'Consolas', monospace;
+  --font-stamp:       'Saira Extra Condensed', 'Impact', sans-serif;
+
+  --scan-opacity:     0.04;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sys);
+  font-size: 12px;
+  line-height: 1.4;
+  background: var(--void);
+  color: var(--steel);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* ── CRT SCANLINES (body::after) ───────────────────────────── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, var(--scan-opacity)) 2px,
+    rgba(0, 0, 0, var(--scan-opacity)) 4px
+  );
+  pointer-events: none;
+  z-index: 10000;
+}
+
+/* ── CRT VIGNETTE (body::before) ───────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 70% 70% at center,
+    transparent 50%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── PHOSPHOR FLICKER ──────────────────────────────────────── */
+@keyframes phosphor-flicker {
+  0%, 100% { opacity: 1; }
+  92%      { opacity: 1; }
+  93%      { opacity: 0.96; }
+  94%      { opacity: 1; }
+}
+body {
+  animation: phosphor-flicker 4s ease-in-out infinite;
+}
+
+/* ── MOVING SCAN LINE ──────────────────────────────────────── */
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.scan-line-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(80, 255, 80, 0.15) 20%,
+    rgba(80, 255, 80, 0.3) 50%,
+    rgba(80, 255, 80, 0.15) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 9997;
+  animation: scan-line 4s linear infinite;
+  opacity: 0.5;
+}
+
+/* ── DISABLE CRT (global setting or image comparison) ──────── */
+html[data-crt-off] body::after,
+html[data-crt-off] body::before,
+html[data-compare-active] body::after,
+html[data-compare-active] body::before { display: none !important; }
+html[data-crt-off] .scan-line-overlay,
+html[data-compare-active] .scan-line-overlay { display: none !important; }
+html[data-crt-off] body,
+html[data-compare-active] body { animation: none !important; }
+
+/* ── REDUCED MOTION ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  body, .scan-line-overlay, [data-mode="emergency"] * {
+    animation: none !important;
+  }
+}
+
+/* ── COMPRESSED TITLE — signature EVA mechanical look ──────── */
+.nerv-title {
+  font-family: var(--font-title);
+  font-weight: 900;
+  transform: scaleX(0.82);
+  transform-origin: left center;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* ── GLOW EFFECTS ──────────────────────────────────────────── */
+.glow-green  { text-shadow: 0 0 8px rgba(80,255,80,0.5), 0 0 16px rgba(80,255,80,0.2); }
+.glow-orange { text-shadow: 0 0 8px rgba(255,152,48,0.5), 0 0 16px rgba(255,152,48,0.2); }
+.glow-cyan   { text-shadow: 0 0 8px rgba(32,240,255,0.5), 0 0 16px rgba(32,240,255,0.2); }
+.glow-red    { text-shadow: 0 0 8px rgba(255,48,48,0.5), 0 0 16px rgba(255,48,48,0.3); }
+
+/* ── LED INDICATORS ────────────────────────────────────────── */
+.led {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.led.green  { background: var(--data-green);  box-shadow: 0 0 4px var(--data-green), 0 0 8px rgba(80,255,80,0.3); }
+.led.red    { background: var(--alert-red);   box-shadow: 0 0 4px var(--alert-red); }
+.led.orange { background: var(--nerv-orange); box-shadow: 0 0 4px var(--nerv-orange); }
+.led.cyan   { background: var(--wire-cyan);   box-shadow: 0 0 4px var(--wire-cyan); }
+@keyframes led-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.led.blink { animation: led-blink 1s ease-in-out infinite; }
+
+/* ── NERV PROGRESS BAR ─────────────────────────────────────── */
+.nerv-progress {
+  height: 3px;
+  background: var(--void-panel);
+  border: 1px solid var(--steel-faint);
+  overflow: hidden;
+}
+.nerv-progress .fill {
+  height: 100%;
+  background: var(--data-green);
+  box-shadow: 0 0 4px rgba(80,255,80,0.3);
+}
+
+/* ── PANEL (base NERV component) ───────────────────────────── */
+.panel {
+  background: var(--void-warm);
+  border: 1px solid var(--steel-faint);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  font-family: var(--font-sys);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--nerv-orange);
+  padding: 6px 10px 5px;
+  border-bottom: 1px solid var(--nerv-orange-dim);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.panel-header .tag {
+  font-size: 7px;
+  color: var(--steel-dim);
+  letter-spacing: 0.08em;
+}
+
+.panel-body {
+  padding: 8px 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── EMERGENCY MODE ────────────────────────────────────────── */
+@keyframes glitch-jitter {
+  0%, 100% { transform: translate(0,0); }
+  10%  { transform: translate(-1px,0); }
+  30%  { transform: translate(0,1px); }
+  50%  { transform: translate(-1px,1px); }
+  70%  { transform: translate(0,-1px); }
+  90%  { transform: translate(1px,1px); }
+}
+
+[data-mode="emergency"] {
+  --data-green: #FF3030;
+  --data-green-dim: #CC2020;
+  --data-green-faint: rgba(255,48,48,0.06);
+  --data-green-fill: rgba(255,48,48,0.1);
+  --wire-cyan: #FF5050;
+  --wire-cyan-dim: #AA3030;
+  --scan-opacity: 0.08;
+}
+
+[data-mode="emergency"] .scan-line-overlay {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,48,48,0.2) 20%, rgba(255,48,48,0.5) 50%, rgba(255,48,48,0.2) 80%, transparent 100%);
+  animation-duration: 2s;
+  opacity: 0.8;
+}
+
+[data-mode="emergency"] .panel { border-color: rgba(255,48,48,0.2); }
+[data-mode="emergency"] .panel-header { border-bottom-color: var(--alert-red-dim); }
+[data-mode="emergency"] .glitch-target { animation: glitch-jitter 0.3s steps(10) infinite; }
+
+/* ── SCROLLBAR ─────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+::-webkit-scrollbar-track {
+  background: var(--void);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--steel-faint);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--nerv-orange-dim);
+}
+
+/* ── UTILITY: NERV border using steel-faint token ──────────── */
+.border-sf { border-color: var(--steel-faint); }
+.border-b-orange { border-bottom-color: var(--nerv-orange-dim); }
+
+/* ── FORM ELEMENT OVERRIDES ────────────────────────────────── */
+select, input[type="text"], input[type="number"] {
+  font-family: var(--font-sys);
+}
+
+select option {
+  background: var(--void-panel);
+  color: var(--steel);
+}

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  prism:
+    build: .
+    container_name: prism
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./input:/input
+      - ./output:/output
+      - ./config:/config
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - INPUT_DIR=/input
+      - OUTPUT_DIR=/output
+      - CONFIG_DIR=/config
+      - ENCODERS_DIR=/config/encoders
