@@ -1593,14 +1593,39 @@ const App = () => {
     <div className="flex h-screen font-sys bg-void text-steel">
       {/* Sidebar */}
       <aside className="w-56 border-r border-sf bg-void flex flex-col shrink-0">
-        <div className="px-5 py-4 border-b border-b-orange flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 bg-nerv flex items-center justify-center font-title font-black text-black text-sm">P</div>
-            <h1 className="nerv-title text-nerv text-sm" style={{ lineHeight: 1 }}>PRISM</h1>
+        <div className="px-4 h-12 shrink-0 border-b border-b-orange flex items-center gap-3">
+          <svg viewBox="0 0 32 32" className="w-7 h-7 shrink-0" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Inverted pyramid — edge-on view */}
+            {/* Front edge vertex at top center, base corners spread, apex at bottom */}
+            {/* Base: 4 corners — front(top-center), left, right, back */}
+            {/* Front top vertex */}
+            {/* Left front edge */}
+            <line x1="16" y1="3" x2="3" y2="10" stroke="var(--nerv-orange)" strokeWidth="1.3" />
+            {/* Right front edge */}
+            <line x1="16" y1="3" x2="29" y2="10" stroke="var(--nerv-orange)" strokeWidth="1.3" />
+            {/* Left back edge (hidden) */}
+            <line x1="16" y1="3" x2="8" y2="14" stroke="var(--nerv-orange)" strokeWidth="0.8" opacity="0.35" />
+            {/* Right back edge (hidden) */}
+            <line x1="16" y1="3" x2="24" y2="14" stroke="var(--nerv-orange)" strokeWidth="0.8" opacity="0.35" />
+            {/* Base bottom edges */}
+            <line x1="3" y1="10" x2="8" y2="14" stroke="var(--nerv-orange)" strokeWidth="1" opacity="0.5" />
+            <line x1="29" y1="10" x2="24" y2="14" stroke="var(--nerv-orange)" strokeWidth="1" opacity="0.5" />
+            {/* Back base edge (hidden) */}
+            <line x1="8" y1="14" x2="24" y2="14" stroke="var(--nerv-orange)" strokeWidth="0.7" opacity="0.3" />
+            {/* Front base edge */}
+            <line x1="3" y1="10" x2="29" y2="10" stroke="var(--nerv-orange)" strokeWidth="1.3" />
+            {/* Edges to apex (bottom point) */}
+            <line x1="3" y1="10" x2="16" y2="30" stroke="var(--nerv-orange)" strokeWidth="1.3" />
+            <line x1="29" y1="10" x2="16" y2="30" stroke="var(--nerv-orange)" strokeWidth="1.3" />
+            <line x1="8" y1="14" x2="16" y2="30" stroke="var(--nerv-orange)" strokeWidth="0.8" opacity="0.35" />
+            <line x1="24" y1="14" x2="16" y2="30" stroke="var(--nerv-orange)" strokeWidth="0.8" opacity="0.35" />
+          </svg>
+          <div className="flex flex-col min-w-0">
+            <h1 className="font-title font-black text-nerv text-2xl tracking-[0.25em] leading-none">PRISM</h1>
+            <span className="text-[10px] font-bold font-sys text-nerv-dim tracking-widest uppercase leading-tight mt-0.5">
+              {versionInfo.channel === 'nightly' ? 'DEV BUILD' : (versionInfo.version ? `V${versionInfo.version}` : 'SYSTEM')}
+            </span>
           </div>
-          <span className="text-[14px] px-1.5 py-0.5 font-sys font-bold text-nerv-dim border border-nerv-dim/30">
-            {versionInfo.channel === 'nightly' ? 'DEV' : (versionInfo.version ? `V${versionInfo.version}` : '')}
-          </span>
         </div>
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           <NavItem icon={<Activity className="w-3.5 h-3.5" />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
