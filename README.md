@@ -1,16 +1,22 @@
 # PRISM
 
-A batch AV1 video encoding system with a web UI for managing encode jobs, building custom SVT-AV1 encoder forks, and monitoring progress in real time.
+**Processing, Rendering, and Interface System for Media**
+
+A batch AV1 video encoding system with a NERV-inspired web dashboard for managing encode jobs, building custom SVT-AV1 encoder forks, running media tools, comparing test encodes, and monitoring everything in real time.
 
 ## Features
 
-- **Batch encoding** - Queue up entire folders of video files for AV1 encoding
-- **Multiple encoder support** - Build and switch between SVT-AV1 forks (5fish PSY, Tritium)
-- **Smart audio handling** - Lossless audio (FLAC, TrueHD, DTS-HD MA, PCM) is transcoded to Opus; lossy formats are copied as-is
-- **Auto-crop detection** - Automatically detects and removes black bars
-- **Real-time dashboard** - Live progress, fps, bitrate, file size, ETA, and terminal output
-- **Theming** - Dark/light mode with 7 accent colors, persisted in the browser
-- **Dockerized** - Runs self-contained on Unraid or any Docker host
+- **Batch encoding** — Queue entire folders of video files for AV1 encoding with real-time telemetry
+- **Multiple encoder support** — Build and switch between SVT-AV1 forks (5fish PSY, Tritium, Essential) from source, with branch selection
+- **Smart audio handling** — Lossless audio is transcoded to Opus; lossy formats are copied as-is with language tags and titles preserved
+- **Auto-crop detection** — Automatically detects and removes black bars
+- **Real-time dashboard** — Live encoding statistics (frames, speed, bitrate, size, ETA), system metrics (per-core CPU, memory), NERV-styled terminal output, media intelligence panel, and operation queue
+- **Test encode & compare** — Run short sample encodes with different settings and compare screenshots side-by-side
+- **Media tools** — 20+ built-in shell tools for muxing, renaming tracks, analyzing color, generating screenshots, and more — all runnable from the UI
+- **System monitoring** — Per-core CPU usage with color-coded bars, segmented memory visualization, load averages, and uptime
+- **Pause/resume** — Pause and resume encode jobs without losing progress
+- **Persistent queue** — Jobs survive server restarts
+- **Dockerized** — Runs self-contained on Unraid or any Docker host
 
 ## Quick Start (Docker)
 
@@ -35,41 +41,59 @@ docker compose up -d
 
 Then open `http://<host>:3000`.
 
-## Unraid
+## Web UI
 
-Adjust the volume paths to your shares:
+### Dashboard
 
-```bash
-docker run -d \
-  --name prism \
-  --restart unless-stopped \
-  -p 3000:3000 \
-  -v /mnt/user/media/input:/input \
-  -v /mnt/user/media/output:/output \
-  -v /mnt/user/appdata/prism:/config \
-  prism
-```
+The main operations view with a 3x2 grid layout:
 
-### Rebuilding after changes
+- **Encode panel** — Current file name, progress bar, pause/resume/stop controls
+- **Encoding statistics** — Live frames, speed, bitrate, size, elapsed, remaining, and crop data organized into Operation, Performance, and Timing sections
+- **System metrics** — Per-core CPU bars (green/orange/red based on load), segmented memory bar, load averages, and uptime
+- **Terminal log** — NERV-styled telemetry feed with color-coded output (green for encode data, cyan for initialization, red for errors) and auto-scroll
+- **Media intelligence** — Source file metadata including resolution, codec, frame rate, color space (primaries, transfer, matrix, range), and audio track details
+- **Operation queue** — Current and upcoming jobs
 
-```bash
-docker stop prism
-docker rm prism
-docker rmi prism
-docker build --no-cache -t prism .
-# then run again with the command above
-```
+### Queue
+
+View and manage pending batch jobs. Add new batches with the file browser, configure encoder, CRF, preset, tune, custom flags, output subfolder, auto-crop, and audio renaming options. Supports directory favorites.
+
+### Encoders
+
+View installed encoders, select a git branch, and compile from source. Build logs stream in real time.
+
+### Tools
+
+Run 20+ media tools directly from the UI with a file browser. Tools include:
+
+| Category | Tools |
+|----------|-------|
+| **Muxing** | mux-english, mux-commentary, strip-compat-audio |
+| **Renaming** | rename-tracks, rename-files, rename-subtitles, rename-chapters |
+| **Audio** | keep-japanese-audio, set-default-audio, swap-audio-order, shift-audio-offset |
+| **Subtitles** | set-default-subtitle, swap-subtitle-order, shift-subtitle-offset |
+| **Analysis** | analyze-color, analyze-vfr, compare-runtimes |
+| **Generation** | generate-sample, generate-screenshots, generate-release-md |
+
+### Compare
+
+Run test encodes with different CRF/preset/tune combinations on a sample, then compare screenshots frame-by-frame with a side-by-side viewer.
+
+### Settings
+
+Toggle CRT effects and light mode. Configure release group name for output tagging.
 
 ## Supported Encoders
 
-Encoders are compiled from source inside the container (or on the host) via the build scripts:
+Encoders are compiled from source inside the container via build scripts:
 
 | Encoder | Fork | Default Branch | Description |
 |---------|------|----------------|-------------|
 | **5fish** | [svt-av1-psy](https://github.com/5fish/svt-av1-psy) | `exp` | Psycho-visual tuned SVT-AV1 |
 | **Tritium** | [svt-av1-tritium](https://github.com/Uranite/svt-av1-tritium) | `main` | Tritium SVT-AV1 fork |
+| **Essential** | [SVT-AV1-Essential](https://github.com/nekotrix/SVT-AV1-Essential) | `Essential-v4.0.1` | Essential SVT-AV1 fork |
 
-Encoders are built and stored in `/config/encoders/<name>/` and can be compiled or rebuilt directly from the web UI's **Encoders** tab.
+Encoders are built and stored in `/config/encoders/<name>/` and can be compiled or rebuilt from the **Encoders** tab.
 
 ## Encoding Parameters
 
@@ -80,6 +104,7 @@ Encoders are built and stored in `/config/encoders/<name>/` and can be compiled 
 | Tune | 0 | Tuning mode (0-4) |
 | Custom Flags | — | Extra encoder flags (e.g. `--lineart-psy-bias 3`) |
 | Output Subfolder | — | Optional subdirectory under `/output` |
+| Auto-Crop | off | Detect and remove black bars automatically |
 
 ## Audio Processing
 
@@ -89,54 +114,6 @@ Audio tracks are handled automatically per-track:
 - **Lossy** (AC3, EAC3, AAC, MP3, DTS, Opus, Vorbis) → Copied without re-encoding
 - Bitrate is chosen by channel count: stereo 128k, 5.1 256k, 7.1 320k
 - Language tags and track titles are preserved
-
-## Web UI
-
-### Dashboard
-Real-time encoding status with progress bar, frame count, speed (fps), bitrate, current/estimated file size, elapsed time, and ETA. Includes a terminal log viewer with scroll lock and a stop button.
-
-### Queue
-View and manage pending batch jobs. Jobs are persisted to disk and survive container restarts.
-
-### Encoders
-View installed encoders, select a git branch, and compile from source. Build logs stream in real time.
-
-### Settings
-Toggle dark/light mode and choose an accent color (red, blue, purple, pink, cyan, orange, green). Preferences are saved in the browser.
-
-## API
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/status` | Current encoding status |
-| GET | `/api/queue` | List queued batches |
-| POST | `/api/queue` | Add a batch to the queue |
-| DELETE | `/api/queue/:id` | Remove a batch from the queue |
-| GET | `/api/encoders` | List available encoders |
-| POST | `/api/encoders/:name/build` | Build/rebuild an encoder |
-| GET | `/api/browse?path=` | Browse directories (for file picker) |
-| POST | `/api/stop` | Stop the current encode |
-
-WebSocket events are emitted via Socket.IO for `status`, `logs`, `build_logs`, `queue_update`, and `build_complete`.
-
-## Project Structure
-
-```
-├── Dockerfile
-├── docker-compose.yml
-├── build_5fish.sh          # Compiler script for 5fish encoder
-├── build_tritium.sh        # Compiler script for Tritium encoder
-├── scripts/
-│   └── encode_single.sh    # Single-file encoding pipeline
-└── webui/
-    ├── server/
-    │   └── index.js         # Express + Socket.IO backend
-    └── client/
-        └── src/
-            ├── App.jsx      # React UI
-            ├── main.jsx
-            └── index.css
-```
 
 ## Tech Stack
 

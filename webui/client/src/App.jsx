@@ -1649,8 +1649,11 @@ const App = () => {
 
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden bg-void">
-        <header className="h-12 shrink-0 border-b border-sf flex items-center justify-between px-6 bg-void z-10">
-          <h2 className="nerv-title text-nerv text-[17px] uppercase tracking-[0.2em]">{activeTab}</h2>
+        <header className="h-12 shrink-0 border-b border-b-orange flex items-center justify-between px-6 bg-void z-10">
+          <div className="flex items-center gap-4">
+            <h2 className="nerv-title text-nerv text-[17px] uppercase tracking-[0.2em]">{activeTab}</h2>
+            <span className="text-[10px] font-bold text-steel-dim uppercase tracking-[0.15em] font-sys hidden lg:inline">Processing, Rendering, and Interface System for Media</span>
+          </div>
           <div className="flex items-center gap-3">
             {testRunning && <div className="flex items-center gap-2 text-[15px] text-black px-3 py-1 font-bold bg-wire-cyan animate-pulse tracking-wider"><FlaskConical className="w-3 h-3" /> TEST ENCODE</div>}
             {toolRunning && <div className="flex items-center gap-2 text-[15px] text-black px-3 py-1 font-bold bg-nerv animate-pulse tracking-wider"><Wrench className="w-3 h-3" /> {toolStatus.toolName?.toUpperCase()}</div>}
