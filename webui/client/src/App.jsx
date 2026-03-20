@@ -415,40 +415,50 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
     <div style={gridStyle}>
       {/* Top-left: encode panel or status cards */}
       {(isEncoding || isPaused) ? (
-        <div style={{ gridArea: 'encode' }} className="border border-data-green-dim/30 p-5 bg-void-panel space-y-4 min-h-0 flex flex-col">
-          <div className="flex justify-between items-start">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-3 mb-1">
-                <h3 className="text-base font-bold truncate text-steel">{activeJob?.name || 'Encode Operation'}</h3>
-                <span className="text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-nerv bg-nerv/5">
-                  {status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'}
-                </span>
-                <span className="text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-steel-dim">
-                  {`${status?.queueLength || 0} Queued`}
-                </span>
-              </div>
+        <div style={{ gridArea: 'encode' }} className="border border-data-green-dim/30 bg-void-panel min-h-0 flex flex-col overflow-hidden">
+          {/* Header row: status badges + controls */}
+          <div className="flex items-center justify-between px-5 pt-4 pb-2 gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border border-data-green-dim/30 text-data-green bg-data-green/5">
+                {status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'}
+              </span>
+              <span className="text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-steel-dim">
+                {`${status?.queueLength || 0} Queued`}
+              </span>
               {isEncoding && (
-                <p className="text-[15px] font-bold text-data-green">
+                <span className="text-[12px] font-bold text-data-green">
                   {status.fileIndex && status.totalFiles ? `File ${status.fileIndex} of ${status.totalFiles}` : 'Starting...'}
                   {status.phase === 'muxing' && ' — Muxing'}
-                </p>
+                </span>
               )}
-              {isPaused && <p className="text-[15px] font-bold text-nerv-dim">Job is waiting to resume</p>}
             </div>
-            <div className="flex items-center gap-3 ml-4">
-              {isEncoding && <p className="text-3xl font-black tabular-nums text-data-green glow-green">{progress.toFixed(1)}%</p>}
+            <div className="flex items-center gap-2 shrink-0">
               {isPaused && (
-                <button onClick={resumeEncode} title="Resume encoding" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Resume</button>
+                <button onClick={resumeEncode} title="Resume encoding" className="flex items-center gap-2 px-4 py-2 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Resume</button>
               )}
               {isEncoding && (
-                <button onClick={pauseEncode} title="Pause encoding" className="p-2.5 bg-nerv/15 text-nerv hover:bg-nerv hover:text-black transition-all active:scale-95"><Pause className="w-4 h-4" /></button>
+                <button onClick={pauseEncode} title="Pause encoding" className="p-2 bg-nerv/15 text-nerv hover:bg-nerv hover:text-black transition-all active:scale-95"><Pause className="w-4 h-4" /></button>
               )}
-              <button onClick={stopEncode} title="Stop and remove from queue" className="p-2.5 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
+              <button onClick={stopEncode} title="Stop and remove from queue" className="p-2 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
             </div>
           </div>
+          {/* Title — full width, allowed to wrap */}
+          <div className="px-5 pb-3">
+            <h3 className="text-lg font-bold text-steel leading-snug break-words">{activeJob?.name || 'Encode Operation'}</h3>
+            {isPaused && <p className="text-sm font-bold text-nerv-dim mt-1">Job is waiting to resume</p>}
+          </div>
+          {/* Spacer to push progress + percentage to bottom */}
+          <div className="flex-1" />
+          {/* Progress section at bottom */}
           {isEncoding && (
-            <div className="w-full h-2 bg-void border border-sf overflow-hidden">
-              <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
+            <div className="px-5 pb-4 space-y-2">
+              <div className="flex items-end justify-between">
+                <span className="text-[12px] font-bold uppercase tracking-widest text-steel-dim">Progress</span>
+                <p className="text-4xl font-black tabular-nums text-data-green glow-green leading-none">{progress.toFixed(1)}%</p>
+              </div>
+              <div className="w-full h-2.5 bg-void border border-sf overflow-hidden">
+                <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
+              </div>
             </div>
           )}
         </div>
