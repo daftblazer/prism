@@ -73,21 +73,21 @@ const SystemMetricsPanel = ({ metrics }) => {
         <div className="flex items-center gap-2"><Cpu className="w-3.5 h-3.5 text-nerv" /><span>System Metrics</span></div>
         <span className="tag">Central Dogma</span>
       </div>
-      <div className="panel-body space-y-4">
+      <div className="panel-body space-y-5">
         {/* CPU Section */}
         <div className="space-y-3">
           <div className="flex justify-between items-end">
             <div className="flex flex-col">
-              <span className="text-[8px] font-bold text-nerv-dim uppercase tracking-widest">Central Processing Unit</span>
-              <span className="text-[10px] font-bold text-steel font-mincho">中央処理装置</span>
+              <span className="text-[9px] font-bold text-nerv-dim uppercase tracking-widest">Central Processing Unit</span>
+              <span className="text-xs font-bold text-steel font-mincho">中央処理装置</span>
             </div>
-            <span className="text-2xl font-black text-data-green glow-green tabular-nums leading-none">{cpuPercent.toFixed(1)}%</span>
+            <span className="text-4xl font-black text-data-green glow-green tabular-nums leading-none">{cpuPercent.toFixed(1)}%</span>
           </div>
 
           {/* Per-core vertical bar visualizer */}
           {perCore.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-end gap-px h-20 bg-void border border-sf p-1">
+            <div className="space-y-2">
+              <div className="flex items-end gap-px h-32 bg-void border border-sf p-1.5">
                 {perCore.map((usage, i) => (
                   <div key={i} className="flex-1 flex flex-col justify-end h-full relative group">
                     <div
@@ -108,7 +108,7 @@ const SystemMetricsPanel = ({ metrics }) => {
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between text-[7px] font-bold text-steel-dim uppercase tracking-tighter tabular-nums">
+              <div className="flex justify-between text-[8px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
                 <span>{coreCount} Logical Cores</span>
                 <span>Load: {metrics?.loadAvg?.[0]?.toFixed(2) || '0.00'} / {metrics?.loadAvg?.[1]?.toFixed(2) || '0.00'} / {metrics?.loadAvg?.[2]?.toFixed(2) || '0.00'}</span>
               </div>
@@ -117,27 +117,27 @@ const SystemMetricsPanel = ({ metrics }) => {
         </div>
 
         {/* Memory Section */}
-        <div className="space-y-2 pt-2 border-t border-sf">
+        <div className="space-y-3 pt-3 border-t border-sf">
           <div className="flex justify-between items-end">
             <div className="flex flex-col">
-              <span className="text-[8px] font-bold text-nerv-dim uppercase tracking-widest">Main Memory Unit</span>
-              <span className="text-[10px] font-bold text-steel font-mincho">主記憶装置</span>
+              <span className="text-[9px] font-bold text-nerv-dim uppercase tracking-widest">Main Memory Unit</span>
+              <span className="text-xs font-bold text-steel font-mincho">主記憶装置</span>
             </div>
-            <span className="text-2xl font-black text-wire-cyan glow-cyan tabular-nums leading-none">{memPercent.toFixed(1)}%</span>
+            <span className="text-4xl font-black text-wire-cyan glow-cyan tabular-nums leading-none">{memPercent.toFixed(1)}%</span>
           </div>
           {/* Segmented memory bar */}
-          <div className="h-5 bg-void border border-sf flex gap-px p-0.5">
-            {Array.from({ length: 32 }).map((_, i) => {
-              const threshold = ((i + 1) / 32) * 100;
+          <div className="h-7 bg-void border border-sf flex gap-px p-1">
+            {Array.from({ length: 48 }).map((_, i) => {
+              const threshold = ((i + 1) / 48) * 100;
               const filled = threshold <= memPercent;
-              const nearEdge = Math.abs(threshold - memPercent) < 3.5;
+              const nearEdge = Math.abs(threshold - memPercent) < 2.5;
               return (
                 <div
                   key={i}
                   className="flex-1 transition-all duration-500"
                   style={{
                     background: filled
-                      ? nearEdge ? 'var(--wire-cyan)' : 'var(--wire-cyan)'
+                      ? 'var(--wire-cyan)'
                       : 'var(--steel-faint, rgba(255,255,255,0.03))',
                     opacity: filled ? (nearEdge ? 0.6 : 1) : 1,
                     boxShadow: filled ? '0 0 4px var(--wire-cyan)' : 'none',
@@ -146,7 +146,7 @@ const SystemMetricsPanel = ({ metrics }) => {
               );
             })}
           </div>
-          <div className="flex justify-between text-[7px] font-bold text-steel-dim uppercase tracking-tighter tabular-nums">
+          <div className="flex justify-between text-[8px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
             <span>Used: {formatBytes(metrics?.mem?.used)}</span>
             <span>Free: {formatBytes(metrics?.mem?.free)}</span>
             <span>Total: {formatBytes(metrics?.mem?.total)}</span>
@@ -155,9 +155,9 @@ const SystemMetricsPanel = ({ metrics }) => {
 
         {/* Uptime */}
         {metrics?.uptime && (
-          <div className="pt-2 border-t border-sf flex justify-between items-center">
-            <span className="text-[8px] font-bold text-nerv uppercase tracking-widest">System Uptime</span>
-            <span className="text-[9px] font-bold text-steel-dim font-sys tabular-nums">
+          <div className="pt-3 border-t border-sf flex justify-between items-center">
+            <span className="text-[9px] font-bold text-nerv uppercase tracking-widest">System Uptime</span>
+            <span className="text-sm font-bold text-steel font-sys tabular-nums">
               {Math.floor(metrics.uptime / 86400)}d {Math.floor((metrics.uptime % 86400) / 3600)}h {Math.floor((metrics.uptime % 3600) / 60)}m
             </span>
           </div>
@@ -206,6 +206,290 @@ const MiniQueue = ({ queue, currentJob }) => {
   );
 };
 
+const COLOR_LABELS = {
+  primaries: { '1': 'BT.709', '9': 'BT.2020', '11': 'DCI-P3', '12': 'Display P3' },
+  transfer: { '1': 'BT.709', '16': 'PQ (HDR10)', '18': 'HLG', '13': 'sRGB' },
+  matrix: { '1': 'BT.709', '9': 'BT.2020nc', '14': 'ICtCp' },
+  range: { '0': 'Limited', '1': 'Full' },
+};
+const colorLabel = (type, val) => COLOR_LABELS[type]?.[val] || val;
+
+const WaveformPanel = ({ status }) => {
+  const canvasRef = useRef(null);
+  const [peaks, setPeaks] = useState([]);
+  const [duration, setDuration] = useState(0);
+  const progress = status?.progress || 0;
+  const isEncoding = status?.active && status.status === 'encoding';
+  const filePath = status?.currentFilePath || null;
+
+  // Fetch waveform data when the current file changes
+  useEffect(() => {
+    if (!filePath) return;
+    let cancelled = false;
+    setPeaks([]);
+    setDuration(0);
+    axios.get('/api/waveform', { params: { file: filePath } })
+      .then(r => {
+        if (!cancelled) {
+          setPeaks(r.data.peaks || []);
+          setDuration(r.data.duration || 0);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [filePath]);
+
+  // Track container size to trigger redraws on resize
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const obs = new ResizeObserver((entries) => {
+      const rect = entries[0].contentRect;
+      if (rect.width > 0 && rect.height > 0) setCanvasSize({ w: rect.width, h: rect.height });
+    });
+    obs.observe(canvas.parentElement);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || canvasSize.w === 0) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvasSize.w * dpr;
+    canvas.height = canvasSize.h * dpr;
+    ctx.scale(dpr, dpr);
+    const w = canvasSize.w;
+    const h = canvasSize.h;
+    ctx.clearRect(0, 0, w, h);
+
+    if (peaks.length === 0) {
+      ctx.strokeStyle = 'rgba(255,152,48,0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, h / 2);
+      ctx.lineTo(w, h / 2);
+      ctx.stroke();
+      return;
+    }
+
+    // Normalize peaks so the loudest bar fills the canvas height
+    const maxPeak = peaks.reduce((m, v) => Math.max(m, v), 0) || 1;
+
+    // Zoomed view: show ~120 peaks at a time, scroll with progress
+    const VISIBLE_PEAKS = Math.min(120, peaks.length);
+    const barW = w / VISIBLE_PEAKS;
+    const mid = h / 2;
+
+    // Calculate viewport: progress playhead sits at 30% from left
+    const progressPeak = (progress / 100) * peaks.length;
+    const playheadOffset = VISIBLE_PEAKS * 0.3;
+    let startPeak = Math.floor(progressPeak - playheadOffset);
+    startPeak = Math.max(0, Math.min(startPeak, peaks.length - VISIBLE_PEAKS));
+    const endPeak = Math.min(startPeak + VISIBLE_PEAKS, peaks.length);
+
+    for (let i = startPeak; i < endPeak; i++) {
+      const x = (i - startPeak) * barW;
+      const amp = (peaks[i] / maxPeak) * mid * 0.92;
+      const encoded = i < progressPeak;
+      const atEdge = Math.abs(i - progressPeak) < 1;
+
+      if (atEdge) {
+        ctx.fillStyle = 'rgba(80,255,80,0.95)';
+        ctx.shadowColor = 'rgba(80,255,80,0.8)';
+        ctx.shadowBlur = 6;
+      } else if (encoded) {
+        ctx.fillStyle = 'rgba(80,255,80,0.6)';
+        ctx.shadowColor = 'rgba(80,255,80,0.3)';
+        ctx.shadowBlur = 2;
+      } else {
+        ctx.fillStyle = 'rgba(255,152,48,0.25)';
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.fillRect(x + 0.5, mid - amp, Math.max(barW - 1, 1), amp * 2);
+    }
+    ctx.shadowBlur = 0;
+
+    // Progress playhead line
+    if (isEncoding && progress > 0) {
+      const playheadX = (progressPeak - startPeak) * barW;
+      if (playheadX >= 0 && playheadX <= w) {
+        ctx.strokeStyle = 'rgba(80,255,80,0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(playheadX, 0);
+        ctx.lineTo(playheadX, h);
+        ctx.stroke();
+
+        // Time label at playhead
+        if (duration > 0) {
+          const currentTime = (progress / 100) * duration;
+          const timeStr = `${Math.floor(currentTime / 60)}:${Math.floor(currentTime % 60).toString().padStart(2, '0')}`;
+          ctx.font = '9px monospace';
+          ctx.fillStyle = 'rgba(80,255,80,0.9)';
+          ctx.fillText(timeStr, playheadX + 4, 12);
+        }
+      }
+    }
+
+    // Mini progress bar at bottom showing full file position
+    const miniH = 3;
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(0, h - miniH, w, miniH);
+    ctx.fillStyle = 'rgba(80,255,80,0.4)';
+    ctx.fillRect(0, h - miniH, w * (progress / 100), miniH);
+    // Viewport indicator
+    const vpStart = (startPeak / peaks.length) * w;
+    const vpWidth = (VISIBLE_PEAKS / peaks.length) * w;
+    ctx.strokeStyle = 'rgba(255,152,48,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(vpStart, h - miniH, vpWidth, miniH);
+
+    // Scanline overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    for (let y = 0; y < h; y += 3) {
+      ctx.fillRect(0, y, w, 1);
+    }
+  }, [peaks, progress, isEncoding, canvasSize, duration]);
+
+  const formatDur = (s) => {
+    if (!s) return '--:--';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="panel overflow-hidden flex flex-col">
+      <div className="panel-header">
+        <div className="flex items-center gap-2">
+          <Activity className="w-3.5 h-3.5 text-nerv" />
+          <span>Audio Waveform Analysis</span>
+          <span className="text-steel font-mincho text-[9px] ml-1">音声波形解析</span>
+        </div>
+        {duration > 0 && <span className="tag">{formatDur(duration)}</span>}
+      </div>
+      <div className="panel-body flex-1 min-h-0 relative p-2">
+        <canvas ref={canvasRef} className="w-full h-full block" />
+        {peaks.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-[9px] font-bold text-steel-dim uppercase tracking-widest">Awaiting Signal</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const MediaInfoPanel = ({ status }) => {
+  const fileMeta = status?.fileMeta;
+  const isEncoding = status?.active && status.status === 'encoding';
+  const encoder = status?.encoder;
+
+  return (
+    <div className="panel overflow-hidden flex flex-col">
+      <div className="panel-header">
+        <div className="flex items-center gap-2">
+          <FileVideo className="w-3.5 h-3.5 text-nerv" />
+          <span>Media Intelligence</span>
+          <span className="text-steel font-mincho text-[9px] ml-1">媒体情報</span>
+        </div>
+        {isEncoding && <span className="tag">Active</span>}
+      </div>
+      <div className="panel-body flex-1 min-h-0 overflow-auto">
+        {(!isEncoding || !fileMeta) ? (
+          <div className="h-full flex items-center justify-center">
+            <span className="text-[9px] font-bold text-steel-dim uppercase tracking-widest">No Active File</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Video info */}
+            <div className="space-y-1.5">
+              <h4 className="text-[8px] font-bold text-nerv uppercase tracking-widest">Video Stream</h4>
+              <div className="grid grid-cols-2 gap-1.5">
+                {fileMeta.resolution && (
+                  <div className="bg-void p-2 border border-sf">
+                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Resolution</span>
+                    <span className="text-[11px] font-bold text-steel">{fileMeta.resolution}</span>
+                  </div>
+                )}
+                {fileMeta.sourceCodec && (
+                  <div className="bg-void p-2 border border-sf">
+                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Source Codec</span>
+                    <span className="text-[11px] font-bold text-steel">{fileMeta.sourceCodec.toUpperCase()}</span>
+                  </div>
+                )}
+                {encoder && (
+                  <div className="bg-void p-2 border border-sf">
+                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Target Encoder</span>
+                    <span className="text-[11px] font-bold text-steel">{encoder.split('/').pop()}</span>
+                  </div>
+                )}
+                {fileMeta.sourceFps && (
+                  <div className="bg-void p-2 border border-sf">
+                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Frame Rate</span>
+                    <span className="text-[11px] font-bold text-steel">{fileMeta.sourceFps} fps</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Color metadata */}
+            {fileMeta.color && (
+              <div className="space-y-1.5">
+                <h4 className="text-[8px] font-bold text-nerv uppercase tracking-widest">Color Space</h4>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div className="bg-void p-2 border border-sf">
+                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Primaries</span>
+                    <span className="text-[11px] font-bold text-wire-cyan">{colorLabel('primaries', fileMeta.color.primaries)}</span>
+                  </div>
+                  <div className="bg-void p-2 border border-sf">
+                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Transfer</span>
+                    <span className="text-[11px] font-bold text-wire-cyan">{colorLabel('transfer', fileMeta.color.transfer)}</span>
+                  </div>
+                  <div className="bg-void p-2 border border-sf">
+                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Matrix</span>
+                    <span className="text-[11px] font-bold text-wire-cyan">{colorLabel('matrix', fileMeta.color.matrix)}</span>
+                  </div>
+                  <div className="bg-void p-2 border border-sf">
+                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Range</span>
+                    <span className="text-[11px] font-bold text-wire-cyan">{colorLabel('range', fileMeta.color.range)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Audio tracks */}
+            {fileMeta.audioTracks && fileMeta.audioTracks.length > 0 && (
+              <div className="space-y-1.5">
+                <h4 className="text-[8px] font-bold text-nerv uppercase tracking-widest">Audio Tracks</h4>
+                <div className="space-y-1">
+                  {fileMeta.audioTracks.map((t, i) => (
+                    <div key={i} className="bg-void p-2 border border-sf flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold text-steel block truncate">{t.title}</span>
+                        <span className="text-[8px] font-bold text-steel-dim uppercase">{t.layout}</span>
+                      </div>
+                      <span className={cn("text-[8px] font-bold uppercase px-1.5 py-0.5 border shrink-0",
+                        t.mode === 'copy' ? 'text-wire-cyan border-wire-cyan/30 bg-wire-cyan/5' : 'text-data-green border-data-green/30 bg-data-green/5'
+                      )}>
+                        {t.mode === 'copy' ? 'Passthrough' : `Encode ${t.bitrate}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const StatusCard = ({ label, value }) => {
   return (
     <div className="border border-sf p-4 bg-void-panel">
@@ -231,18 +515,18 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
   const isIdleWithQueue = status?.status === 'idle' && queue.length > 0;
   const gridStyle = isEncoding || isPaused ? {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr minmax(280px, 320px)',
+    gridTemplateColumns: '1fr 1fr 1fr',
     gridTemplateRows: 'auto 1fr',
-    gridTemplateAreas: `"encode encode sidebar" "terminal terminal sidebar"`,
+    gridTemplateAreas: `"encode waveform sidebar" "terminal mediainfo sidebar"`,
     flex: '1 1 0%',
     minHeight: 0,
     gap: '12px',
     padding: '16px',
   } : {
     display: 'grid',
-    gridTemplateColumns: '1fr minmax(280px, 320px)',
+    gridTemplateColumns: '1fr 1fr 1fr',
     gridTemplateRows: 'auto 1fr',
-    gridTemplateAreas: `"status sidebar" "terminal sidebar"`,
+    gridTemplateAreas: `"status waveform sidebar" "terminal mediainfo sidebar"`,
     flex: '1 1 0%',
     minHeight: 0,
     gap: '12px',
@@ -290,7 +574,7 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
                 <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
               </div>
               {(status.fps || status.currentFrame || status.crop) && (
-                <div className="grid grid-cols-7 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <StatChip label="Frames" value={status.currentFrame && status.totalFrames ? `${status.currentFrame} / ${status.totalFrames}` : status.currentFrame} />
                   <StatChip label="Speed" value={status.fps ? `${status.fps} fps` : null} />
                   <StatChip label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
@@ -323,6 +607,14 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
           )}
         </div>
       )}
+
+      {/* Center column: waveform + media info */}
+      <div style={{ gridArea: 'waveform' }} className="min-h-0 flex flex-col">
+        <WaveformPanel status={status} />
+      </div>
+      <div style={{ gridArea: 'mediainfo' }} className="min-h-0 flex flex-col">
+        <MediaInfoPanel status={status} />
+      </div>
 
       {/* Right column: metrics + queue */}
       <div style={{ gridArea: 'sidebar' }} className="min-h-0 overflow-auto flex flex-col gap-3">
@@ -1409,12 +1701,14 @@ const App = () => {
           </div>
         </header>
         {activeTab === 'dashboard' && <Dashboard status={status} queue={queue} logs={logs} logRef={logRef} setLogs={setLogs} autoScroll={autoScroll} setAutoScroll={setAutoScroll} systemMetrics={systemMetrics} />}
-        <div className="flex-1 overflow-auto p-6 max-w-[1800px] mx-auto w-full">
-          {activeTab === 'queue' && <QueueSection queue={queue} />}
-          {activeTab === 'encoders' && <EncodersSection encoders={encoders} buildEncoder={buildEncoder} buildLogs={buildLogs} />}
-          {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
-          {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} />}
-        </div>
+        {activeTab !== 'dashboard' && (
+          <div className="flex-1 overflow-auto p-6 max-w-[1800px] mx-auto w-full">
+            {activeTab === 'queue' && <QueueSection queue={queue} />}
+            {activeTab === 'encoders' && <EncodersSection encoders={encoders} buildEncoder={buildEncoder} buildLogs={buildLogs} />}
+            {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
+            {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} />}
+          </div>
+        )}
       </main>
       {isModalOpen && <AddBatchModal onClose={() => setIsModalOpen(false)} encoders={encoders} onSuccess={() => { setIsModalOpen(false); fetchQueue(); }} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
       {isTestEncodeOpen && <TestEncodeModal onClose={() => setIsTestEncodeOpen(false)} encoders={encoders} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}

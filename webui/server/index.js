@@ -56,25 +56,30 @@ function probeVideo(filePath) {
   return new Promise((resolve) => {
     const probe = spawn('ffprobe', [
       '-v', 'error', '-select_streams', 'v:0',
-      '-show_entries', 'stream=nb_frames,r_frame_rate,avg_frame_rate:format=duration',
+      '-show_entries', 'stream=nb_frames,r_frame_rate,avg_frame_rate,width,height,codec_name:format=duration',
       '-print_format', 'json', filePath
     ]);
     let out = '';
     probe.stdout.on('data', (d) => out += d.toString());
     probe.on('close', (code) => {
-      if (code !== 0) { resolve(0); return; }
+      if (code !== 0) { resolve({ totalFrames: 0 }); return; }
       try {
         const data = JSON.parse(out);
         const stream = data.streams?.[0] || {};
         let nbFrames = parseInt(stream.nb_frames, 10);
-        if (nbFrames > 0) { resolve(nbFrames); return; }
         const duration = parseFloat(data.format?.duration || 0);
         const fpsStr = stream.avg_frame_rate || stream.r_frame_rate || '0/0';
         const [num, den] = fpsStr.split('/').map(Number);
         const fps = den > 0 ? num / den : 0;
-        const estimated = Math.round(duration * fps);
-        resolve(estimated > 0 ? estimated : 0);
-      } catch { resolve(0); }
+        if (!(nbFrames > 0)) nbFrames = Math.round(duration * fps);
+        resolve({
+          totalFrames: nbFrames > 0 ? nbFrames : 0,
+          width: parseInt(stream.width, 10) || 0,
+          height: parseInt(stream.height, 10) || 0,
+          codec: stream.codec_name || '',
+          duration,
+        });
+      } catch { resolve({ totalFrames: 0 }); }
     });
   });
 }
@@ -94,7 +99,7 @@ async function loadQueue() {
 async function saveQueue() { try { await fs.writeJson(QUEUE_FILE, queue); } catch (err) { console.error('Save error:', err); } }
 
 function parseEncodeOutput(clean, totalFrames, cropInfo) {
-  const result = { progress: -1, muxProgress: -1, stats: {}, cropInfo: null };
+  const result = { progress: -1, muxProgress: -1, stats: {}, cropInfo: null, meta: {} };
   const cropM = clean.match(/Auto-crop:\s*(crop=\S+)/);
   if (cropM) { result.cropInfo = cropM[1]; result.stats.crop = cropM[1]; }
   if (cropInfo) result.stats.crop = cropInfo;
@@ -127,6 +132,21 @@ function parseEncodeOutput(clean, totalFrames, cropInfo) {
     const mkv = clean.match(/Progress:\s*(\d+)%/);
     if (mkv) result.muxProgress = parseInt(mkv[1], 10);
   }
+
+  // Parse media metadata lines
+  const colorM = clean.match(/==> Color:\s*primaries=(\S+)\s+transfer=(\S+)\s+matrix=(\S+)\s+range=(\S+)/);
+  if (colorM) result.meta.color = { primaries: colorM[1], transfer: colorM[2], matrix: colorM[3], range: colorM[4] };
+  const srcFpsM = clean.match(/==> Source FPS:\s*([\d.]+)/);
+  if (srcFpsM) result.meta.sourceFps = parseFloat(srcFpsM[1]);
+  // Audio plan lines: PLAN|idx|mode|bitrate|lang|title|layout
+  const planLines = clean.match(/PLAN\|.+/g);
+  if (planLines) {
+    result.meta.audioTracks = planLines.map(line => {
+      const [, idx, mode, bitrate, lang, title, layout] = line.split('|');
+      return { index: parseInt(idx, 10), mode, bitrate, lang, title, layout };
+    });
+  }
+
   return result;
 }
 
@@ -193,15 +213,16 @@ class Worker {
       const progressStep = 100 / files.length;
       io.emit('status', {
         active: true, status: 'encoding', activeJob: { name: path.basename(file) },
-        progress: progressBase, currentFile: path.basename(file),
-        fileIndex: i + 1, totalFiles: files.length, queueLength: queue.length
+        progress: progressBase, currentFile: path.basename(file), currentFilePath: file,
+        fileIndex: i + 1, totalFiles: files.length, queueLength: queue.length,
+        encoder: batch.encoder
       });
       await this.encodeFile(file, batch, (fProg, encStats) => {
         io.emit('status', {
           active: true, status: 'encoding', activeJob: { name: path.basename(file) },
           progress: progressBase + (fProg * progressStep / 100),
-          currentFile: path.basename(file), fileIndex: i + 1, totalFiles: files.length,
-          queueLength: queue.length, ...encStats
+          currentFile: path.basename(file), currentFilePath: file, fileIndex: i + 1, totalFiles: files.length,
+          queueLength: queue.length, encoder: batch.encoder, ...encStats
         });
       });
     }
@@ -209,7 +230,8 @@ class Worker {
   }
 
   async encodeFile(file, batch, onProgress) {
-    const totalFrames = await probeVideo(file);
+    const probeInfo = await probeVideo(file);
+    const totalFrames = probeInfo.totalFrames;
     if (totalFrames > 0) this.log(`Probed total frames for ${path.basename(file)}: ${totalFrames}`, 'info');
     else this.log(`Could not determine total frames for ${path.basename(file)} - progress may be unavailable`, 'info');
     
@@ -248,11 +270,20 @@ class Worker {
       currentChild = child;
       
       let cropInfo = null;
+      let fileMeta = {
+        resolution: probeInfo.width && probeInfo.height ? `${probeInfo.width}x${probeInfo.height}` : null,
+        sourceCodec: probeInfo.codec || null,
+        duration: probeInfo.duration || null,
+      };
       const parseOutput = (out) => {
         const result = parseEncodeOutput(stripAnsi(out), totalFrames, cropInfo);
         if (result.cropInfo) { cropInfo = result.cropInfo; }
-        if (result.progress >= 0) { onProgress(result.progress, result.stats); return; }
-        if (result.muxProgress >= 0) { onProgress(result.muxProgress, { phase: 'muxing' }); }
+        // Accumulate metadata across chunks
+        if (result.meta.color) fileMeta.color = result.meta.color;
+        if (result.meta.sourceFps) fileMeta.sourceFps = result.meta.sourceFps;
+        if (result.meta.audioTracks) fileMeta.audioTracks = result.meta.audioTracks;
+        if (result.progress >= 0) { onProgress(result.progress, { ...result.stats, fileMeta }); return; }
+        if (result.muxProgress >= 0) { onProgress(result.muxProgress, { phase: 'muxing', fileMeta }); }
       };
       
       child.stdout.on('data', (d) => { const out = d.toString(); this.log(out, 'stdout'); parseOutput(out); });
@@ -322,6 +353,63 @@ app.get('/api/system/metrics', (req, res) => {
     },
     uptime: os.uptime(),
     loadAvg: os.loadavg()
+  });
+});
+
+// --- Waveform Generation ---
+const waveformCache = new Map();
+app.get('/api/waveform', (req, res) => {
+  const file = req.query.file;
+  if (!file) return res.status(400).json({ error: 'file parameter required' });
+  if (waveformCache.has(file)) return res.json(waveformCache.get(file));
+
+  const NUM_PEAKS = 500;
+  // Use lavfi to compute per-segment peak amplitude directly in ffmpeg
+  // This avoids buffering the entire decoded audio in memory
+  const probe = spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-print_format', 'json', file]);
+  let probeOut = '';
+  probe.stdout.on('data', d => probeOut += d.toString());
+  probe.stderr.on('data', () => {});
+  probe.on('close', () => {
+    let duration = 0;
+    try { duration = parseFloat(JSON.parse(probeOut).format?.duration || 0); } catch {}
+    if (duration <= 0) return res.json({ peaks: [], duration: 0 });
+
+    // Sample rate chosen so total samples ≈ NUM_PEAKS * samplesPerBin
+    // Use a small samplesPerBin (16) so we get manageable data (~32KB for 500 peaks)
+    const samplesPerBin = 16;
+    const sampleRate = Math.max(1, Math.round((NUM_PEAKS * samplesPerBin) / duration));
+    const ff = spawn('ffmpeg', [
+      '-i', file, '-vn', '-ac', '1',
+      '-ar', String(sampleRate),
+      '-f', 'f32le', 'pipe:1'
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+    const chunks = [];
+    ff.stdout.on('data', d => chunks.push(d));
+    ff.stderr.on('data', () => {});
+    ff.on('close', (code) => {
+      if (code !== 0 || chunks.length === 0) return res.json({ peaks: [], duration });
+      const raw = Buffer.concat(chunks);
+      // Copy to aligned ArrayBuffer for Float32Array compatibility
+      const aligned = new ArrayBuffer(raw.length);
+      new Uint8Array(aligned).set(raw);
+      const samples = new Float32Array(aligned);
+      const binSize = Math.max(1, Math.floor(samples.length / NUM_PEAKS));
+      const peaks = [];
+      for (let i = 0; i < NUM_PEAKS && i * binSize < samples.length; i++) {
+        let max = 0;
+        const end = Math.min((i + 1) * binSize, samples.length);
+        for (let j = i * binSize; j < end; j++) {
+          const abs = Math.abs(samples[j]);
+          if (abs > max) max = abs;
+        }
+        peaks.push(Math.min(max, 1));
+      }
+      const result = { peaks, duration };
+      waveformCache.set(file, result);
+      res.json(result);
+    });
   });
 });
 
