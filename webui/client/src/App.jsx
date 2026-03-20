@@ -227,6 +227,13 @@ const EncodingStatsPanel = ({ status }) => {
   const hasStats = isEncoding || isPaused;
   const currentState = status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle';
 
+  const InfoCell = ({ label, value, accent }) => (
+    <div className="bg-void p-2.5 border border-sf">
+      <span className="text-[11px] font-bold text-steel-dim uppercase block">{label}</span>
+      <span className={cn("text-[17px] font-bold", accent ? "text-data-green" : "text-steel")}>{value || '—'}</span>
+    </div>
+  );
+
   return (
     <div className="panel overflow-hidden flex flex-col">
       <div className="panel-header">
@@ -238,23 +245,45 @@ const EncodingStatsPanel = ({ status }) => {
         <span className="tag">{currentState}</span>
       </div>
       <div className="panel-body flex-1 min-h-0 overflow-auto">
-        <div className="grid grid-cols-3 gap-2 mb-2">
-          <StatChip label="State" value={currentState} />
-          <StatChip label="Batch" value={`${status?.queueLength || 0} Queued`} />
-          {hasStats && <StatChip label="Frames" value={status.currentFrame && status.totalFrames ? `${status.currentFrame} / ${status.totalFrames}` : status.currentFrame} />}
-        </div>
-        {hasStats && (status.fps || status.currentFrame || status.crop) ? (
-          <div className="grid grid-cols-3 gap-2">
-            <StatChip label="Speed" value={status.fps ? `${status.fps} fps` : null} />
-            <StatChip label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
-            <StatChip label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
-            <StatChip label="Elapsed" value={status.elapsed} />
-            <StatChip label="Remaining" value={status.eta} />
-            <StatChip label="Crop" value={status.crop} />
+        {!hasStats ? (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <h4 className="text-[12px] font-bold text-nerv uppercase tracking-widest">System Status</h4>
+              <div className="grid grid-cols-2 gap-1.5">
+                <InfoCell label="State" value={currentState} />
+                <InfoCell label="Batch Queue" value={`${status?.queueLength || 0} Queued`} />
+              </div>
+            </div>
+            <div className="flex items-center justify-center pt-4">
+              <span className="text-[14px] font-bold text-steel-dim uppercase tracking-widest">Awaiting Signal</span>
+            </div>
           </div>
-        ) : !hasStats && (
-          <div className="flex items-center justify-center py-8">
-            <span className="text-[14px] font-bold text-steel-dim uppercase tracking-widest">Awaiting Signal</span>
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <h4 className="text-[12px] font-bold text-nerv uppercase tracking-widest">Operation</h4>
+              <div className="grid grid-cols-3 gap-1.5">
+                <InfoCell label="State" value={currentState} accent />
+                <InfoCell label="Batch Queue" value={`${status?.queueLength || 0} Queued`} />
+                <InfoCell label="Frames" value={status.currentFrame && status.totalFrames ? `${status.currentFrame} / ${status.totalFrames}` : status.currentFrame || '—'} accent />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <h4 className="text-[12px] font-bold text-nerv uppercase tracking-widest">Performance</h4>
+              <div className="grid grid-cols-3 gap-1.5">
+                <InfoCell label="Speed" value={status.fps ? `${status.fps} fps` : null} accent />
+                <InfoCell label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
+                <InfoCell label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <h4 className="text-[12px] font-bold text-nerv uppercase tracking-widest">Timing</h4>
+              <div className="grid grid-cols-3 gap-1.5">
+                <InfoCell label="Elapsed" value={status.elapsed} />
+                <InfoCell label="Remaining" value={status.eta} />
+                <InfoCell label="Crop" value={status.crop} />
+              </div>
+            </div>
           </div>
         )}
       </div>
