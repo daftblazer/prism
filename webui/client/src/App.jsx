@@ -15,7 +15,7 @@ const socket = io();
 
 // --- Helper Components ---
 
-const SettingsPanel = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled }) => {
+const SettingsPanel = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled, lightMode, setLightMode }) => {
   const [releaseGroup, setReleaseGroup] = useState(appSettings?.releaseGroup || '');
   useEffect(() => { setReleaseGroup(appSettings?.releaseGroup || ''); }, [appSettings?.releaseGroup]);
   const handleReleaseGroupSave = () => { saveAppSettings({ releaseGroup }); };
@@ -31,6 +31,12 @@ const SettingsPanel = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled
         <span className="text-[14px] font-bold uppercase tracking-widest text-nerv">CRT Effects</span>
         <button onClick={() => setCrtEnabled(!crtEnabled)} className={cn("px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border", crtEnabled ? "border-data-green/30 bg-data-green/10 text-data-green" : "border-sf bg-void text-steel-dim")}>
           {crtEnabled ? 'On' : 'Off'}
+        </button>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[14px] font-bold uppercase tracking-widest text-nerv">Light Mode</span>
+        <button onClick={() => setLightMode(!lightMode)} className={cn("px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border", lightMode ? "border-nerv/30 bg-nerv/10 text-nerv" : "border-sf bg-void text-steel-dim")}>
+          {lightMode ? 'On' : 'Off'}
         </button>
       </div>
     </div>
@@ -214,168 +220,39 @@ const COLOR_LABELS = {
 };
 const colorLabel = (type, val) => COLOR_LABELS[type]?.[val] || val;
 
-const WaveformPanel = ({ status }) => {
-  const canvasRef = useRef(null);
-  const [peaks, setPeaks] = useState([]);
-  const [duration, setDuration] = useState(0);
-  const progress = status?.progress || 0;
+const EncodingStatsPanel = ({ status }) => {
   const isEncoding = status?.active && status.status === 'encoding';
-  const filePath = status?.currentFilePath || null;
-
-  // Fetch waveform data when the current file changes
-  useEffect(() => {
-    if (!filePath) return;
-    let cancelled = false;
-    setPeaks([]);
-    setDuration(0);
-    axios.get('/api/waveform', { params: { file: filePath } })
-      .then(r => {
-        if (!cancelled) {
-          setPeaks(r.data.peaks || []);
-          setDuration(r.data.duration || 0);
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [filePath]);
-
-  // Track container size to trigger redraws on resize
-  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const obs = new ResizeObserver((entries) => {
-      const rect = entries[0].contentRect;
-      if (rect.width > 0 && rect.height > 0) setCanvasSize({ w: rect.width, h: rect.height });
-    });
-    obs.observe(canvas.parentElement);
-    return () => obs.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || canvasSize.w === 0) return;
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = canvasSize.w * dpr;
-    canvas.height = canvasSize.h * dpr;
-    ctx.scale(dpr, dpr);
-    const w = canvasSize.w;
-    const h = canvasSize.h;
-    ctx.clearRect(0, 0, w, h);
-
-    if (peaks.length === 0) {
-      ctx.strokeStyle = 'rgba(255,152,48,0.15)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, h / 2);
-      ctx.lineTo(w, h / 2);
-      ctx.stroke();
-      return;
-    }
-
-    // Normalize peaks so the loudest bar fills the canvas height
-    const maxPeak = peaks.reduce((m, v) => Math.max(m, v), 0) || 1;
-
-    // Zoomed view: show ~120 peaks at a time, scroll with progress
-    const VISIBLE_PEAKS = Math.min(120, peaks.length);
-    const barW = w / VISIBLE_PEAKS;
-    const mid = h / 2;
-
-    // Calculate viewport: progress playhead sits at 30% from left
-    const progressPeak = (progress / 100) * peaks.length;
-    const playheadOffset = VISIBLE_PEAKS * 0.3;
-    let startPeak = Math.floor(progressPeak - playheadOffset);
-    startPeak = Math.max(0, Math.min(startPeak, peaks.length - VISIBLE_PEAKS));
-    const endPeak = Math.min(startPeak + VISIBLE_PEAKS, peaks.length);
-
-    for (let i = startPeak; i < endPeak; i++) {
-      const x = (i - startPeak) * barW;
-      const amp = (peaks[i] / maxPeak) * mid * 0.92;
-      const encoded = i < progressPeak;
-      const atEdge = Math.abs(i - progressPeak) < 1;
-
-      if (atEdge) {
-        ctx.fillStyle = 'rgba(80,255,80,0.95)';
-        ctx.shadowColor = 'rgba(80,255,80,0.8)';
-        ctx.shadowBlur = 6;
-      } else if (encoded) {
-        ctx.fillStyle = 'rgba(80,255,80,0.6)';
-        ctx.shadowColor = 'rgba(80,255,80,0.3)';
-        ctx.shadowBlur = 2;
-      } else {
-        ctx.fillStyle = 'rgba(255,152,48,0.25)';
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-      }
-
-      ctx.fillRect(x + 0.5, mid - amp, Math.max(barW - 1, 1), amp * 2);
-    }
-    ctx.shadowBlur = 0;
-
-    // Progress playhead line
-    if (isEncoding && progress > 0) {
-      const playheadX = (progressPeak - startPeak) * barW;
-      if (playheadX >= 0 && playheadX <= w) {
-        ctx.strokeStyle = 'rgba(80,255,80,0.9)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(playheadX, 0);
-        ctx.lineTo(playheadX, h);
-        ctx.stroke();
-
-        // Time label at playhead
-        if (duration > 0) {
-          const currentTime = (progress / 100) * duration;
-          const timeStr = `${Math.floor(currentTime / 60)}:${Math.floor(currentTime % 60).toString().padStart(2, '0')}`;
-          ctx.font = '9px monospace';
-          ctx.fillStyle = 'rgba(80,255,80,0.9)';
-          ctx.fillText(timeStr, playheadX + 4, 12);
-        }
-      }
-    }
-
-    // Mini progress bar at bottom showing full file position
-    const miniH = 3;
-    ctx.fillStyle = 'rgba(255,255,255,0.05)';
-    ctx.fillRect(0, h - miniH, w, miniH);
-    ctx.fillStyle = 'rgba(80,255,80,0.4)';
-    ctx.fillRect(0, h - miniH, w * (progress / 100), miniH);
-    // Viewport indicator
-    const vpStart = (startPeak / peaks.length) * w;
-    const vpWidth = (VISIBLE_PEAKS / peaks.length) * w;
-    ctx.strokeStyle = 'rgba(255,152,48,0.5)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(vpStart, h - miniH, vpWidth, miniH);
-
-    // Scanline overlay
-    ctx.fillStyle = 'rgba(0,0,0,0.06)';
-    for (let y = 0; y < h; y += 3) {
-      ctx.fillRect(0, y, w, 1);
-    }
-  }, [peaks, progress, isEncoding, canvasSize, duration]);
-
-  const formatDur = (s) => {
-    if (!s) return '--:--';
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
+  const isPaused = status?.status === 'paused';
+  const hasStats = isEncoding || isPaused;
+  const currentState = status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle';
 
   return (
     <div className="panel overflow-hidden flex flex-col">
       <div className="panel-header">
         <div className="flex items-center gap-2">
-          <Activity className="w-3.5 h-3.5 text-nerv" />
-          <span>Audio Waveform Analysis</span>
-          <span className="text-steel font-mincho text-[14px] ml-1">音声波形解析</span>
+          <Cpu className="w-3.5 h-3.5 text-nerv" />
+          <span>Encoding Statistics</span>
+          <span className="text-steel font-mincho text-[14px] ml-1">符号化統計</span>
         </div>
-        {duration > 0 && <span className="tag">{formatDur(duration)}</span>}
+        <span className="tag">{currentState}</span>
       </div>
-      <div className="panel-body flex-1 min-h-0 relative p-2">
-        <canvas ref={canvasRef} className="w-full h-full block" />
-        {peaks.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center">
+      <div className="panel-body flex-1 min-h-0 overflow-auto">
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          <StatChip label="State" value={currentState} />
+          <StatChip label="Batch" value={`${status?.queueLength || 0} Queued`} />
+          {hasStats && <StatChip label="Frames" value={status.currentFrame && status.totalFrames ? `${status.currentFrame} / ${status.totalFrames}` : status.currentFrame} />}
+        </div>
+        {hasStats && (status.fps || status.currentFrame || status.crop) ? (
+          <div className="grid grid-cols-3 gap-2">
+            <StatChip label="Speed" value={status.fps ? `${status.fps} fps` : null} />
+            <StatChip label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
+            <StatChip label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
+            <StatChip label="Elapsed" value={status.elapsed} />
+            <StatChip label="Remaining" value={status.eta} />
+            <StatChip label="Crop" value={status.crop} />
+          </div>
+        ) : !hasStats && (
+          <div className="flex items-center justify-center py-8">
             <span className="text-[14px] font-bold text-steel-dim uppercase tracking-widest">Awaiting Signal</span>
           </div>
         )}
@@ -516,8 +393,8 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
   const gridStyle = isEncoding || isPaused ? {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr 1fr',
-    gridTemplateRows: 'auto 1fr',
-    gridTemplateAreas: `"encode waveform sidebar" "terminal mediainfo sidebar"`,
+    gridTemplateRows: '1fr 1fr',
+    gridTemplateAreas: `"encode stats sidebar" "terminal mediainfo sidebar"`,
     flex: '1 1 0%',
     minHeight: 0,
     gap: '12px',
@@ -525,8 +402,8 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
   } : {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr 1fr',
-    gridTemplateRows: 'auto 1fr',
-    gridTemplateAreas: `"status waveform sidebar" "terminal mediainfo sidebar"`,
+    gridTemplateRows: '1fr 1fr',
+    gridTemplateAreas: `"status stats sidebar" "terminal mediainfo sidebar"`,
     flex: '1 1 0%',
     minHeight: 0,
     gap: '12px',
@@ -537,7 +414,7 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
     <div style={gridStyle}>
       {/* Top-left: encode panel or status cards */}
       {(isEncoding || isPaused) ? (
-        <div style={{ gridArea: 'encode' }} className="border border-data-green-dim/30 p-5 bg-void-panel space-y-4 min-h-0">
+        <div style={{ gridArea: 'encode' }} className="border border-data-green-dim/30 p-5 bg-void-panel space-y-4 min-h-0 flex flex-col">
           <div className="flex justify-between items-start">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3 mb-1">
@@ -569,33 +446,20 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
             </div>
           </div>
           {isEncoding && (
-            <>
-              <div className="w-full h-2 bg-void border border-sf overflow-hidden">
-                <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
-              </div>
-              {(status.fps || status.currentFrame || status.crop) && (
-                <div className="grid grid-cols-4 gap-2">
-                  <StatChip label="Frames" value={status.currentFrame && status.totalFrames ? `${status.currentFrame} / ${status.totalFrames}` : status.currentFrame} />
-                  <StatChip label="Speed" value={status.fps ? `${status.fps} fps` : null} />
-                  <StatChip label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
-                  <StatChip label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
-                  <StatChip label="Elapsed" value={status.elapsed} />
-                  <StatChip label="Remaining" value={status.eta} />
-                  <StatChip label="Crop" value={status.crop} />
-                </div>
-              )}
-            </>
+            <div className="w-full h-2 bg-void border border-sf overflow-hidden">
+              <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
+            </div>
           )}
         </div>
       ) : (
-        <div style={{ gridArea: 'status' }} className="space-y-3 min-h-0">
-          <div className="grid grid-cols-3 gap-3">
-            <StatusCard label="Current State" value={status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'} />
-            <StatusCard label="Active Path" value={activeJob?.name || 'None'} />
-            <StatusCard label="Queue Count" value={`${status?.queueLength || 0} Batches`} />
+        <div style={{ gridArea: 'status' }} className="min-h-0 flex flex-col border border-sf bg-void-panel">
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
+            <span className="text-[14px] font-bold uppercase tracking-widest text-nerv mb-1">All Systems Standing By</span>
+            <span className="text-xs font-bold text-steel font-mincho">全系統待機中</span>
+            <span className="text-[12px] font-bold uppercase tracking-widest text-steel-dim mt-4">No Active Encode Operations</span>
           </div>
           {isIdleWithQueue && (
-            <div className="border border-sf p-5 bg-void-panel">
+            <div className="border-t border-sf p-5">
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="nerv-title text-nerv text-base">Queue Ready</h3>
@@ -609,15 +473,15 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
       )}
 
       {/* Center column: waveform + media info */}
-      <div style={{ gridArea: 'waveform' }} className="min-h-0 flex flex-col">
-        <WaveformPanel status={status} />
+      <div style={{ gridArea: 'stats' }} className="min-h-0 flex flex-col [&>*]:flex-1">
+        <EncodingStatsPanel status={status} />
       </div>
-      <div style={{ gridArea: 'mediainfo' }} className="min-h-0 flex flex-col">
+      <div style={{ gridArea: 'mediainfo' }} className="min-h-0 flex flex-col [&>*]:flex-1">
         <MediaInfoPanel status={status} />
       </div>
 
       {/* Right column: metrics + queue */}
-      <div style={{ gridArea: 'sidebar' }} className="min-h-0 overflow-auto flex flex-col gap-3">
+      <div style={{ gridArea: 'sidebar' }} className="min-h-0 overflow-auto flex flex-col gap-3 [&>*]:flex-1 [&>*]:min-h-0">
         <SystemMetricsPanel metrics={systemMetrics} />
         <MiniQueue queue={queue} currentJob={activeJob} />
       </div>
@@ -633,7 +497,7 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
         </div>
         <div ref={logRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[17px] leading-relaxed text-data-green-dim min-h-0">
           {logs.length === 0 && <p className="text-steel-dim/50 italic">Listening for output...</p>}
-          {logs.map((log, i) => <div key={i} className="mb-1 border-l border-sf pl-3 py-0.5 hover:bg-white/[0.02] text-data-green-dim">{log}</div>)}
+          {logs.map((log, i) => <div key={i} className="mb-1 border-l border-sf pl-3 py-0.5 hover:bg-steel/[0.05] text-data-green-dim">{log}</div>)}
         </div>
       </div>
 
@@ -740,7 +604,7 @@ const FileBrowser = ({ currentPath, onNavigate, onSelect, onFileSelect, selected
       </div>
       <div className="flex-1 overflow-auto p-3 space-y-0.5">
         {currentPath !== '/' && (
-          <button onClick={() => onNavigate(currentPath.substring(0, currentPath.lastIndexOf('/')) || '/')} className="w-full flex items-center gap-3 px-3 py-3 font-bold text-[15px] uppercase tracking-widest mb-3 border border-sf hover:bg-white/[0.03] text-steel-dim"><CornerLeftUp className="w-4 h-4" /> Go Back</button>
+          <button onClick={() => onNavigate(currentPath.substring(0, currentPath.lastIndexOf('/')) || '/')} className="w-full flex items-center gap-3 px-3 py-3 font-bold text-[15px] uppercase tracking-widest mb-3 border border-sf hover:bg-steel/[0.05] text-steel-dim"><CornerLeftUp className="w-4 h-4" /> Go Back</button>
         )}
         {favDirs.length > 0 && (
           <div className="mb-3">
@@ -820,8 +684,8 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
             <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Output Subfolder</label><input type="text" value={formData.subfolder} onChange={e=>setFormData({...formData, subfolder:e.target.value})} placeholder="e.g. encodes" className={inputCls} /></div>
             <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Extra Encoder Flags</label><input type="text" value={formData.custom_flags} onChange={e=>setFormData({...formData, custom_flags:e.target.value})} placeholder="e.g. --lineart-psy-bias 3" className={inputCls} /></div>
             <div className="space-y-2">
-              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.auto_crop} onChange={e=>setFormData({...formData, auto_crop:e.target.checked})} className="w-4 h-4 accent-[#FF9830]" /><span className="text-xs font-bold text-steel">Auto-Crop Black Bars</span></label>
-              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.rename_audio} onChange={e=>setFormData({...formData, rename_audio:e.target.checked})} className="w-4 h-4 accent-[#FF9830]" /><span className="text-xs font-bold text-steel">Rename Audio Tracks</span></label>
+              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.auto_crop} onChange={e=>setFormData({...formData, auto_crop:e.target.checked})} className="w-4 h-4 accent-nerv" /><span className="text-xs font-bold text-steel">Auto-Crop Black Bars</span></label>
+              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.rename_audio} onChange={e=>setFormData({...formData, rename_audio:e.target.checked})} className="w-4 h-4 accent-nerv" /><span className="text-xs font-bold text-steel">Rename Audio Tracks</span></label>
             </div>
             <button type="submit" disabled={path==='/'} className="w-full py-4 font-bold text-sm transition-all active:scale-[0.98] uppercase tracking-wider text-black disabled:opacity-30 bg-nerv hover:bg-nerv-hot">Add Batch to Queue</button>
           </form>
@@ -1306,7 +1170,7 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
             <div className="flex items-center gap-1 flex-wrap flex-1">
               {variants.map((v, i) => (
                 <button key={v.label} onClick={() => setActiveVariant(i)} className={cn("px-3 py-1.5 text-[15px] font-bold transition-all uppercase tracking-wider", activeVariant === i ? "bg-wire-cyan text-black" : "text-steel-dim hover:text-wire-cyan")}>
-                  <span className={cn("inline-block w-4 h-4 text-center mr-1 text-[14px] leading-4 font-bold", activeVariant === i ? "bg-black/20" : "bg-[#1a1a18]")}>{i + 1}</span>
+                  <span className={cn("inline-block w-4 h-4 text-center mr-1 text-[14px] leading-4 font-bold", activeVariant === i ? "bg-black/20" : "bg-void-raised")}>{i + 1}</span>
                   {v.label}
                 </button>
               ))}
@@ -1353,7 +1217,7 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
               <div className="w-full flex gap-2 overflow-x-auto">
                 {variants.map((v, i) => (
                   <div key={v.label} className="flex-1 min-w-[200px] flex flex-col items-center gap-1.5">
-                    <span className={cn("text-[15px] font-bold px-2.5 py-0.5 uppercase tracking-wider", activeVariant === i ? "bg-wire-cyan text-black" : "bg-[#1a1a18] text-steel-dim")}>{v.label}</span>
+                    <span className={cn("text-[15px] font-bold px-2.5 py-0.5 uppercase tracking-wider", activeVariant === i ? "bg-wire-cyan text-black" : "bg-void-raised text-steel-dim")}>{v.label}</span>
                     {v.screenshots[currentPosition] ? (
                       <div
                         className="relative overflow-hidden w-full select-none"
@@ -1398,7 +1262,7 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
               </button>
               <div className="flex items-center gap-1">
                 {Array.from({ length: maxScreenshots }, (_, i) => (
-                  <button key={i} onClick={() => setCurrentPosition(i)} className={cn("w-2 h-2 transition-all", currentPosition === i ? "bg-wire-cyan scale-125" : "bg-[#1a1a18] hover:bg-steel-dim")} />
+                  <button key={i} onClick={() => setCurrentPosition(i)} className={cn("w-2 h-2 transition-all", currentPosition === i ? "bg-wire-cyan scale-125" : "bg-void-raised hover:bg-steel-dim")} />
                 ))}
               </div>
               <span className="text-[15px] font-bold tabular-nums min-w-[50px] text-center text-steel-dim font-sys">{currentPosition + 1} / {maxScreenshots}</span>
@@ -1608,11 +1472,17 @@ const App = () => {
   const [testEncodeStatus, setTestEncodeStatus] = useState(null);
   const [versionInfo, setVersionInfo] = useState({ version: null, channel: 'release' });
   const [crtEnabled, setCrtEnabled] = useState(() => localStorage.getItem('crt-effects') !== 'off');
+  const [lightMode, setLightMode] = useState(() => localStorage.getItem('theme') === 'light');
 
   useEffect(() => {
     localStorage.setItem('crt-effects', crtEnabled ? 'on' : 'off');
     document.documentElement.toggleAttribute('data-crt-off', !crtEnabled);
   }, [crtEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('theme', lightMode ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', lightMode ? 'light' : 'dark');
+  }, [lightMode]);
 
   const fetchEncoders = useCallback(async () => { try { const res = await axios.get('/api/encoders'); setEncoders(res.data); } catch (err) { console.error(err); } }, []);
   const fetchQueue = useCallback(async () => { try { const res = await axios.get('/api/queue'); setQueue(res.data); } catch (err) { console.error(err); } }, []);
@@ -1682,7 +1552,7 @@ const App = () => {
             <button onClick={() => setSettingsOpen(!settingsOpen)} className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold transition-all", settingsOpen ? "text-nerv bg-nerv/10" : "text-steel-dim hover:text-nerv")}>
               <Settings className="w-3.5 h-3.5" /> SETTINGS
             </button>
-            {settingsOpen && <SettingsPanel appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} />}
+            {settingsOpen && <SettingsPanel appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} />}
           </div>
           <button onClick={() => setIsModalOpen(true)} className="w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 tracking-wider uppercase">
             <Plus className="w-3.5 h-3.5" />Add Batch

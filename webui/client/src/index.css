@@ -51,6 +51,23 @@ html {
   --font-stamp:       'Saira Extra Condensed', 'Impact', sans-serif;
 
   --scan-opacity:     0.04;
+
+  --void-rgb:             0 0 0;
+  --void-warm-rgb:        8 8 7;
+  --void-panel-rgb:       12 12 10;
+  --void-raised-rgb:      17 17 16;
+  --nerv-orange-rgb:      255 152 48;
+  --nerv-orange-dim-rgb:  200 112 32;
+  --nerv-orange-hot-rgb:  255 204 80;
+  --data-green-rgb:       80 255 80;
+  --data-green-dim-rgb:   48 187 48;
+  --wire-cyan-rgb:        32 240 255;
+  --wire-cyan-dim-rgb:    16 160 176;
+  --alert-red-rgb:        255 48 48;
+  --alert-red-dim-rgb:    204 32 32;
+  --alert-red-hot-rgb:    255 80 80;
+  --steel-rgb:            216 216 208;
+  --steel-dim-rgb:        136 136 128;
 }
 
 body {
@@ -136,6 +153,49 @@ body {
   animation: scan-line 4s linear infinite;
   opacity: 0.5;
 }
+
+/* ── LIGHT THEME ──────────────────────────────────────────── */
+html[data-theme="light"] {
+  --void:             #F0EDE8;    --void-rgb:             240 237 232;
+  --void-warm:        #FFFFFF;    --void-warm-rgb:        255 255 255;
+  --void-panel:       #F7F5F2;    --void-panel-rgb:       247 245 242;
+  --void-raised:      #EDEAE5;    --void-raised-rgb:      237 234 229;
+
+  --nerv-orange:      #C06800;    --nerv-orange-rgb:      192 104 0;
+  --nerv-orange-dim:  #9E5500;    --nerv-orange-dim-rgb:  158 85 0;
+  --nerv-orange-hot:  #E08000;    --nerv-orange-hot-rgb:  224 128 0;
+  --nerv-orange-fill: rgba(192, 104, 0, 0.08);
+
+  --data-green:       #1A8C1A;    --data-green-rgb:       26 140 26;
+  --data-green-dim:   #157015;    --data-green-dim-rgb:   21 112 21;
+  --data-green-faint: rgba(26, 140, 26, 0.06);
+  --data-green-fill:  rgba(26, 140, 26, 0.1);
+
+  --wire-cyan:        #0A7A85;    --wire-cyan-rgb:        10 122 133;
+  --wire-cyan-dim:    #065560;    --wire-cyan-dim-rgb:    6 85 96;
+  --wire-cyan-glow:   rgba(10, 122, 133, 0.12);
+
+  --alert-red:        #CC2020;    --alert-red-rgb:        204 32 32;
+  --alert-red-dim:    #A01818;    --alert-red-dim-rgb:    160 24 24;
+  --alert-red-hot:    #E03030;    --alert-red-hot-rgb:    224 48 48;
+  --alert-red-fill:   rgba(204, 32, 32, 0.1);
+
+  --steel:            #2A2A28;    --steel-rgb:            42 42 40;
+  --steel-dim:        #6A6A65;    --steel-dim-rgb:        106 106 101;
+  --steel-faint:      rgba(42, 42, 40, 0.10);
+  --steel-line:       rgba(42, 42, 40, 0.15);
+
+  --scan-opacity: 0;
+}
+
+html[data-theme="light"] body::after,
+html[data-theme="light"] body::before { display: none !important; }
+html[data-theme="light"] .scan-line-overlay { display: none !important; }
+html[data-theme="light"] body { animation: none !important; }
+html[data-theme="light"] .glow-green,
+html[data-theme="light"] .glow-orange,
+html[data-theme="light"] .glow-cyan,
+html[data-theme="light"] .glow-red { text-shadow: none; }
 
 /* ── DISABLE CRT (global setting or image comparison) ──────── */
 html[data-crt-off] body::after,

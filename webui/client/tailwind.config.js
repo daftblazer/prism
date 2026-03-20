@@ -7,12 +7,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        void: { DEFAULT: '#000000', warm: '#080807', panel: '#0C0C0A', raised: '#111110' },
-        nerv: { DEFAULT: '#FF9830', dim: '#C87020', hot: '#FFCC50' },
-        'data-green': { DEFAULT: '#50FF50', dim: '#30BB30' },
-        'wire-cyan': { DEFAULT: '#20F0FF', dim: '#10A0B0' },
-        'alert-red': { DEFAULT: '#FF3030', dim: '#CC2020', hot: '#FF5050' },
-        steel: { DEFAULT: '#D8D8D0', dim: '#888880' },
+        void: { DEFAULT: 'rgb(var(--void-rgb) / <alpha-value>)', warm: 'rgb(var(--void-warm-rgb) / <alpha-value>)', panel: 'rgb(var(--void-panel-rgb) / <alpha-value>)', raised: 'rgb(var(--void-raised-rgb) / <alpha-value>)' },
+        nerv: { DEFAULT: 'rgb(var(--nerv-orange-rgb) / <alpha-value>)', dim: 'rgb(var(--nerv-orange-dim-rgb) / <alpha-value>)', hot: 'rgb(var(--nerv-orange-hot-rgb) / <alpha-value>)' },
+        'data-green': { DEFAULT: 'rgb(var(--data-green-rgb) / <alpha-value>)', dim: 'rgb(var(--data-green-dim-rgb) / <alpha-value>)' },
+        'wire-cyan': { DEFAULT: 'rgb(var(--wire-cyan-rgb) / <alpha-value>)', dim: 'rgb(var(--wire-cyan-dim-rgb) / <alpha-value>)' },
+        'alert-red': { DEFAULT: 'rgb(var(--alert-red-rgb) / <alpha-value>)', dim: 'rgb(var(--alert-red-dim-rgb) / <alpha-value>)', hot: 'rgb(var(--alert-red-hot-rgb) / <alpha-value>)' },
+        steel: { DEFAULT: 'rgb(var(--steel-rgb) / <alpha-value>)', dim: 'rgb(var(--steel-dim-rgb) / <alpha-value>)' },
       },
       fontFamily: {
         title: ['"Noto Serif Display"', '"Times New Roman"', 'serif'],
