@@ -74,33 +74,33 @@ const SystemMetricsPanel = ({ metrics }) => {
   const coreCount = perCore.length || metrics?.cores || 0;
 
   return (
-    <div className="panel overflow-hidden">
+    <div className="panel overflow-hidden flex flex-col">
       <div className="panel-header">
         <div className="flex items-center gap-2"><Cpu className="w-3.5 h-3.5 text-nerv" /><span>System Metrics</span></div>
         <span className="tag">Central Dogma</span>
       </div>
-      <div className="panel-body space-y-5">
-        {/* CPU Section */}
-        <div className="space-y-3">
+      <div className="panel-body flex-1 min-h-0 flex flex-col overflow-auto">
+        {/* CPU Section — grows to fill available space */}
+        <div className="space-y-2 flex-1 min-h-0 flex flex-col">
           <div className="flex justify-between items-end">
             <div className="flex flex-col">
-              <span className="text-[14px] font-bold text-nerv-dim uppercase tracking-widest">Central Processing Unit</span>
-              <span className="text-xs font-bold text-steel font-mincho">中央処理装置</span>
+              <span className="text-[13px] font-bold text-nerv-dim uppercase tracking-widest">Central Processing Unit</span>
+              <span className="text-[11px] font-bold text-steel font-mincho">中央処理装置</span>
             </div>
-            <span className="text-4xl font-black text-data-green glow-green tabular-nums leading-none">{cpuPercent.toFixed(1)}%</span>
+            <span className="text-3xl font-black text-data-green glow-green tabular-nums leading-none">{cpuPercent.toFixed(1)}%</span>
           </div>
 
           {/* Per-core horizontal bar grid */}
           {perCore.length > 0 && (
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            <div className="flex-1 min-h-0 flex flex-col gap-1">
+              <div className="grid grid-cols-2 gap-x-3 flex-1 min-h-0" style={{ gridAutoRows: 'minmax(14px, 1fr)' }}>
                 {perCore.map((usage, i) => {
                   const barColor = usage > 90 ? 'var(--alert-red)' : usage > 70 ? 'var(--nerv-orange)' : 'var(--data-green)';
                   const glowColor = usage > 90 ? 'var(--alert-red)' : usage > 70 ? 'var(--nerv-orange)' : 'var(--data-green)';
                   return (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-steel-dim tabular-nums w-7 shrink-0">C{i}</span>
-                      <div className="flex-1 h-3 bg-void border border-sf overflow-hidden">
+                    <div key={i} className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-steel-dim tabular-nums w-6 shrink-0">C{i}</span>
+                      <div className="flex-1 h-3/4 min-h-[10px] bg-void border border-sf overflow-hidden">
                         <div
                           className="h-full transition-all duration-700 ease-out"
                           style={{
@@ -115,7 +115,7 @@ const SystemMetricsPanel = ({ metrics }) => {
                   );
                 })}
               </div>
-              <div className="flex justify-between text-[12px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
+              <div className="flex justify-between text-[11px] font-bold text-steel-dim uppercase tracking-tight tabular-nums shrink-0">
                 <span>{coreCount} Logical Cores</span>
                 <span>Load: {metrics?.loadAvg?.[0]?.toFixed(2) || '0.00'} / {metrics?.loadAvg?.[1]?.toFixed(2) || '0.00'} / {metrics?.loadAvg?.[2]?.toFixed(2) || '0.00'}</span>
               </div>
@@ -124,16 +124,16 @@ const SystemMetricsPanel = ({ metrics }) => {
         </div>
 
         {/* Memory Section */}
-        <div className="space-y-3 pt-3 border-t border-sf">
+        <div className="space-y-2 pt-3 mt-3 border-t border-sf shrink-0">
           <div className="flex justify-between items-end">
             <div className="flex flex-col">
-              <span className="text-[14px] font-bold text-nerv-dim uppercase tracking-widest">Main Memory Unit</span>
-              <span className="text-xs font-bold text-steel font-mincho">主記憶装置</span>
+              <span className="text-[13px] font-bold text-nerv-dim uppercase tracking-widest">Main Memory Unit</span>
+              <span className="text-[11px] font-bold text-steel font-mincho">主記憶装置</span>
             </div>
-            <span className="text-4xl font-black text-wire-cyan glow-cyan tabular-nums leading-none">{memPercent.toFixed(1)}%</span>
+            <span className="text-3xl font-black text-wire-cyan glow-cyan tabular-nums leading-none">{memPercent.toFixed(1)}%</span>
           </div>
           {/* Segmented memory bar */}
-          <div className="h-7 bg-void border border-sf flex gap-px p-1">
+          <div className="h-6 bg-void border border-sf flex gap-px p-0.5">
             {Array.from({ length: 48 }).map((_, i) => {
               const threshold = ((i + 1) / 48) * 100;
               const filled = threshold <= memPercent;
@@ -153,17 +153,17 @@ const SystemMetricsPanel = ({ metrics }) => {
               );
             })}
           </div>
-          <div className="flex justify-between text-[12px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
+          <div className="flex justify-between text-[11px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
             <span>Used: {formatBytes(metrics?.mem?.used)}</span>
             <span>Free: {formatBytes(metrics?.mem?.free)}</span>
             <span>Total: {formatBytes(metrics?.mem?.total)}</span>
           </div>
         </div>
 
-        {/* Uptime */}
+        {/* Uptime — pinned to bottom */}
         {metrics?.uptime && (
-          <div className="pt-3 border-t border-sf flex justify-between items-center">
-            <span className="text-[14px] font-bold text-nerv uppercase tracking-widest">System Uptime</span>
+          <div className="pt-3 mt-3 border-t border-sf flex justify-between items-center shrink-0">
+            <span className="text-[13px] font-bold text-nerv uppercase tracking-widest">System Uptime</span>
             <span className="text-sm font-bold text-steel font-sys tabular-nums">
               {Math.floor(metrics.uptime / 86400)}d {Math.floor((metrics.uptime % 86400) / 3600)}h {Math.floor((metrics.uptime % 3600) / 60)}m
             </span>
