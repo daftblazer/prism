@@ -6,6 +6,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { spawn } = require('child_process');
+const os = require('os');
 
 console.log("####################################");
 console.log(">>> PRISM SERVER V0.1.0 STARTING <<<");
@@ -276,6 +277,53 @@ class Worker {
 const worker = new Worker();
 const frontendDist = path.join(__dirname, '../client/dist');
 if (fs.existsSync(frontendDist)) app.use(express.static(frontendDist));
+
+// --- System Metrics ---
+let lastCpuUsage = 0;
+let lastPerCore = [];
+
+function snapshotCPUs() {
+  return os.cpus().map(c => {
+    const t = c.times;
+    const total = t.user + t.nice + t.sys + t.idle + t.irq;
+    return { idle: t.idle, total };
+  });
+}
+
+let lastSnap = snapshotCPUs();
+setInterval(() => {
+  const snap = snapshotCPUs();
+  let totalIdle = 0, totalAll = 0;
+  lastPerCore = snap.map((cur, i) => {
+    const prev = lastSnap[i];
+    const dTotal = cur.total - prev.total;
+    const dIdle = cur.idle - prev.idle;
+    totalIdle += dIdle;
+    totalAll += dTotal;
+    return dTotal > 0 ? 100 * (1 - dIdle / dTotal) : 0;
+  });
+  if (totalAll > 0) lastCpuUsage = 100 * (1 - totalIdle / totalAll);
+  lastSnap = snap;
+}, 2000);
+
+app.get('/api/system/metrics', (req, res) => {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  res.json({
+    cpu: lastCpuUsage,
+    perCore: lastPerCore,
+    cores: os.cpus().length,
+    mem: {
+      total: totalMem,
+      free: freeMem,
+      used: usedMem,
+      percentage: (usedMem / totalMem) * 100
+    },
+    uptime: os.uptime(),
+    loadAvg: os.loadavg()
+  });
+});
 
 app.get('/api/browse', async (req, res) => {
   const fullPath = req.query.path || '/';

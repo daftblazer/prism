@@ -13,115 +13,7 @@ import { twMerge } from 'tailwind-merge';
 function cn(...inputs) { return twMerge(clsx(inputs)); }
 const socket = io();
 
-const App = () => {
-  const [status, setStatus] = useState(null);
-  const [logs, setLogs] = useState([]);
-  const [buildLogs, setBuildLogs] = useState({});
-  const [queue, setQueue] = useState([]);
-  const [encoders, setEncoders] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const logRef = useRef(null);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [toolLogs, setToolLogs] = useState([]);
-  const [toolStatus, setToolStatus] = useState(null);
-  const [appSettings, setAppSettings] = useState({});
-  const toolLogRef = useRef(null);
-  const [isTestEncodeOpen, setIsTestEncodeOpen] = useState(false);
-  const [testEncodeStatus, setTestEncodeStatus] = useState(null);
-  const [versionInfo, setVersionInfo] = useState({ version: null, channel: 'release' });
-  const [crtEnabled, setCrtEnabled] = useState(() => localStorage.getItem('crt-effects') !== 'off');
-
-  useEffect(() => {
-    localStorage.setItem('crt-effects', crtEnabled ? 'on' : 'off');
-    document.documentElement.toggleAttribute('data-crt-off', !crtEnabled);
-  }, [crtEnabled]);
-
-  useEffect(() => {
-    socket.on('status', (data) => setStatus(prev => {
-      const sameFile = prev?.currentFile === data.currentFile && data.status === 'encoding';
-      return { ...data, crop: data.crop || (sameFile ? prev?.crop : undefined) };
-    }));
-    socket.on('logs', (data) => setLogs(prev => [...prev.slice(-499), data]));
-    socket.on('build_logs', (data) => setBuildLogs(prev => ({ ...prev, [data.encoder]: [...(prev[data.encoder] || []).slice(-499), data.log] })));
-    socket.on('queue_update', (data) => setQueue(data));
-    socket.on('build_complete', () => fetchEncoders());
-    socket.on('tool_output', (data) => setToolLogs(prev => [...prev.slice(-499), data]));
-    socket.on('tool_status', (data) => setToolStatus(data));
-    socket.on('test_encode_status', (data) => { setTestEncodeStatus(data); if (data.phase === 'done') setActiveTab('compare'); });
-    fetchEncoders(); fetchQueue(); fetchSettings();
-    axios.get('/api/version').then(res => setVersionInfo(res.data)).catch(() => {});
-    return () => { socket.off('status'); socket.off('logs'); socket.off('build_logs'); socket.off('queue_update'); socket.off('build_complete'); socket.off('tool_output'); socket.off('tool_status'); socket.off('test_encode_status'); };
-  }, []);
-
-  useEffect(() => { if (autoScroll && logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [logs, autoScroll]);
-
-  const fetchEncoders = async () => { try { const res = await axios.get('/api/encoders'); setEncoders(res.data); } catch (err) { console.error(err); } };
-  const fetchQueue = async () => { try { const res = await axios.get('/api/queue'); setQueue(res.data); } catch (err) { console.error(err); } };
-  const buildEncoder = async (name, branch) => { try { await axios.post(`/api/encoders/${name}/build`, { branch }); } catch (err) { alert(err.message); } };
-  const fetchSettings = async () => { try { const res = await axios.get('/api/settings'); setAppSettings(res.data); } catch (err) { console.error(err); } };
-  const saveAppSettings = async (newSettings) => { try { const res = await axios.post('/api/settings', newSettings); setAppSettings(res.data); } catch (err) { console.error(err); } };
-  const toggleFavorite = async (dirPath) => {
-    try { const res = await axios.post('/api/favorites/toggle', { path: dirPath }); setAppSettings(prev => ({ ...prev, favorites: res.data.favorites })); } catch (err) { console.error(err); }
-  };
-
-  return (
-    <div className="flex h-screen font-sys bg-void text-steel">
-      {/* Sidebar */}
-      <aside className="w-56 border-r border-sf bg-void flex flex-col">
-        <div className="px-5 py-4 border-b border-b-orange flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 bg-nerv flex items-center justify-center font-title font-black text-black text-sm">P</div>
-            <h1 className="nerv-title text-nerv text-sm" style={{ lineHeight: 1 }}>PRISM</h1>
-          </div>
-          <span className="text-[9px] px-1.5 py-0.5 font-sys font-bold text-nerv-dim border border-nerv-dim/30">
-            {versionInfo.channel === 'nightly' ? 'DEV' : (versionInfo.version ? `V${versionInfo.version}` : '')}
-          </span>
-        </div>
-        <nav className="flex-1 p-3 space-y-0.5">
-          <NavItem icon={<Activity className="w-3.5 h-3.5" />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          <NavItem icon={<List className="w-3.5 h-3.5" />} label="Queue" active={activeTab === 'queue'} onClick={() => setActiveTab('queue')} />
-          <NavItem icon={<Cpu className="w-3.5 h-3.5" />} label="Encoders" active={activeTab === 'encoders'} onClick={() => setActiveTab('encoders')} />
-          <NavItem icon={<Wrench className="w-3.5 h-3.5" />} label="Tools" active={activeTab === 'tools'} onClick={() => setActiveTab('tools')} />
-          <NavItem icon={<FlaskConical className="w-3.5 h-3.5" />} label="Compare" active={activeTab === 'compare'} onClick={() => setActiveTab('compare')} />
-        </nav>
-        <div className="p-3 space-y-2 border-t border-sf">
-          <div className="relative">
-            <button onClick={() => setSettingsOpen(!settingsOpen)} className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold transition-all", settingsOpen ? "text-nerv bg-nerv/10" : "text-steel-dim hover:text-nerv")}>
-              <Settings className="w-3.5 h-3.5" /> SETTINGS
-            </button>
-            {settingsOpen && <SettingsPanel appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} />}
-          </div>
-          <button onClick={() => setIsModalOpen(true)} className="w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 tracking-wider uppercase">
-            <Plus className="w-3.5 h-3.5" />Add Batch
-          </button>
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <main className="flex-1 overflow-auto bg-void">
-        <header className="h-12 border-b border-sf flex items-center justify-between px-6 bg-void sticky top-0 z-10">
-          <h2 className="nerv-title text-nerv text-[11px]">{activeTab}</h2>
-          <div className="flex items-center gap-3">
-            {testEncodeStatus?.running && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-wire-cyan animate-pulse tracking-wider"><FlaskConical className="w-3 h-3" /> TEST ENCODE</div>}
-            {toolStatus?.running && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-nerv animate-pulse tracking-wider"><Wrench className="w-3 h-3" /> {toolStatus.toolName?.toUpperCase()}</div>}
-            {status?.active && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-data-green animate-pulse tracking-wider">{status.status?.toUpperCase()}</div>}
-          </div>
-        </header>
-        <div className="p-6 max-w-6xl mx-auto">
-          {activeTab === 'dashboard' && <Dashboard status={status} queue={queue} logs={logs} logRef={logRef} setLogs={setLogs} autoScroll={autoScroll} setAutoScroll={setAutoScroll} />}
-          {activeTab === 'queue' && <QueueSection queue={queue} />}
-          {activeTab === 'encoders' && <EncodersSection encoders={encoders} buildEncoder={buildEncoder} buildLogs={buildLogs} />}
-          {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
-          {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} />}
-        </div>
-      </main>
-      {isModalOpen && <AddBatchModal onClose={() => setIsModalOpen(false)} encoders={encoders} onSuccess={() => { setIsModalOpen(false); fetchQueue(); }} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
-      {isTestEncodeOpen && <TestEncodeModal onClose={() => setIsTestEncodeOpen(false)} encoders={encoders} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
-    </div>
-  );
-};
+// --- Helper Components ---
 
 const SettingsPanel = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled }) => {
   const [releaseGroup, setReleaseGroup] = useState(appSettings?.releaseGroup || '');
@@ -161,7 +53,169 @@ const StatChip = ({ label, value }) => {
   );
 };
 
-const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoScroll }) => {
+const formatBytes = (bytes) => {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const SystemMetricsPanel = ({ metrics }) => {
+  const cpuPercent = metrics?.cpu || 0;
+  const memPercent = metrics?.mem?.percentage || 0;
+  const perCore = metrics?.perCore || [];
+  const coreCount = perCore.length || metrics?.cores || 0;
+
+  return (
+    <div className="panel overflow-hidden">
+      <div className="panel-header">
+        <div className="flex items-center gap-2"><Cpu className="w-3.5 h-3.5 text-nerv" /><span>System Metrics</span></div>
+        <span className="tag">Central Dogma</span>
+      </div>
+      <div className="panel-body space-y-4">
+        {/* CPU Section */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-end">
+            <div className="flex flex-col">
+              <span className="text-[8px] font-bold text-nerv-dim uppercase tracking-widest">Central Processing Unit</span>
+              <span className="text-[10px] font-bold text-steel font-mincho">中央処理装置</span>
+            </div>
+            <span className="text-2xl font-black text-data-green glow-green tabular-nums leading-none">{cpuPercent.toFixed(1)}%</span>
+          </div>
+
+          {/* Per-core vertical bar visualizer */}
+          {perCore.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-end gap-px h-20 bg-void border border-sf p-1">
+                {perCore.map((usage, i) => (
+                  <div key={i} className="flex-1 flex flex-col justify-end h-full relative group">
+                    <div
+                      className="w-full transition-all duration-700 ease-out"
+                      style={{
+                        height: `${Math.max(usage, 1)}%`,
+                        background: usage > 90
+                          ? 'var(--nerv)'
+                          : usage > 60
+                            ? 'linear-gradient(to top, var(--data-green), var(--nerv))'
+                            : 'var(--data-green)',
+                        boxShadow: usage > 10 ? `0 0 ${Math.min(usage / 10, 6)}px ${usage > 90 ? 'var(--nerv)' : 'var(--data-green)'}` : 'none',
+                      }}
+                    />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1 py-0.5 bg-black/90 border border-sf text-[8px] font-bold text-data-green tabular-nums whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                      C{i}: {usage.toFixed(0)}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between text-[7px] font-bold text-steel-dim uppercase tracking-tighter tabular-nums">
+                <span>{coreCount} Logical Cores</span>
+                <span>Load: {metrics?.loadAvg?.[0]?.toFixed(2) || '0.00'} / {metrics?.loadAvg?.[1]?.toFixed(2) || '0.00'} / {metrics?.loadAvg?.[2]?.toFixed(2) || '0.00'}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Memory Section */}
+        <div className="space-y-2 pt-2 border-t border-sf">
+          <div className="flex justify-between items-end">
+            <div className="flex flex-col">
+              <span className="text-[8px] font-bold text-nerv-dim uppercase tracking-widest">Main Memory Unit</span>
+              <span className="text-[10px] font-bold text-steel font-mincho">主記憶装置</span>
+            </div>
+            <span className="text-2xl font-black text-wire-cyan glow-cyan tabular-nums leading-none">{memPercent.toFixed(1)}%</span>
+          </div>
+          {/* Segmented memory bar */}
+          <div className="h-5 bg-void border border-sf flex gap-px p-0.5">
+            {Array.from({ length: 32 }).map((_, i) => {
+              const threshold = ((i + 1) / 32) * 100;
+              const filled = threshold <= memPercent;
+              const nearEdge = Math.abs(threshold - memPercent) < 3.5;
+              return (
+                <div
+                  key={i}
+                  className="flex-1 transition-all duration-500"
+                  style={{
+                    background: filled
+                      ? nearEdge ? 'var(--wire-cyan)' : 'var(--wire-cyan)'
+                      : 'var(--steel-faint, rgba(255,255,255,0.03))',
+                    opacity: filled ? (nearEdge ? 0.6 : 1) : 1,
+                    boxShadow: filled ? '0 0 4px var(--wire-cyan)' : 'none',
+                  }}
+                />
+              );
+            })}
+          </div>
+          <div className="flex justify-between text-[7px] font-bold text-steel-dim uppercase tracking-tighter tabular-nums">
+            <span>Used: {formatBytes(metrics?.mem?.used)}</span>
+            <span>Free: {formatBytes(metrics?.mem?.free)}</span>
+            <span>Total: {formatBytes(metrics?.mem?.total)}</span>
+          </div>
+        </div>
+
+        {/* Uptime */}
+        {metrics?.uptime && (
+          <div className="pt-2 border-t border-sf flex justify-between items-center">
+            <span className="text-[8px] font-bold text-nerv uppercase tracking-widest">System Uptime</span>
+            <span className="text-[9px] font-bold text-steel-dim font-sys tabular-nums">
+              {Math.floor(metrics.uptime / 86400)}d {Math.floor((metrics.uptime % 86400) / 3600)}h {Math.floor((metrics.uptime % 3600) / 60)}m
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const MiniQueue = ({ queue, currentJob }) => {
+  const nextJobs = queue.filter(j => j.id !== currentJob?.id).slice(0, 5);
+  
+  return (
+    <div className="panel overflow-hidden">
+      <div className="panel-header">
+        <div className="flex items-center gap-2"><List className="w-3.5 h-3.5 text-nerv" /><span>Operation Queue</span></div>
+        <span className="tag">{queue.length} Active</span>
+      </div>
+      <div className="panel-body p-0">
+        {nextJobs.length === 0 ? (
+          <div className="p-8 text-center text-[10px] font-bold text-steel-dim uppercase italic tracking-widest">
+            Queue Exhausted
+          </div>
+        ) : (
+          <div className="divide-y divide-sf">
+            {nextJobs.map((job, i) => (
+              <div key={job.id || i} className="p-3 flex items-start gap-3 bg-void-panel/50 hover:bg-nerv/5 transition-colors group">
+                <div className="text-[9px] font-black text-nerv-dim group-hover:text-nerv mt-0.5">{i + 1}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-bold text-steel truncate uppercase tracking-tight">{job.input_folder.split('/').pop()}</div>
+                  <div className="text-[8px] font-bold text-steel-dim uppercase mt-0.5">
+                    CRF {job.crf} | {job.encoder.split('/').pop()}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {queue.length > 5 && (
+              <div className="p-2 text-center text-[8px] font-bold text-nerv-dim uppercase tracking-widest bg-void">
+                + {queue.length - 5} more items
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const StatusCard = ({ label, value }) => {
+  return (
+    <div className="border border-sf p-4 bg-void-panel">
+      <p className="text-[8px] font-bold uppercase tracking-widest text-nerv mb-1.5">{label}</p>
+      <p className="text-sm font-bold truncate text-steel">{value}</p>
+    </div>
+  );
+};
+
+const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoScroll, systemMetrics }) => {
   const activeJob = status?.activeJob;
   const progress = status?.progress || 0;
   const handleScroll = () => {
@@ -176,101 +230,99 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
   const isPaused = status?.status === 'paused';
   const isIdleWithQueue = status?.status === 'idle' && queue.length > 0;
   return (
-    <div className="space-y-4">
-      {/* Status cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <StatusCard label="Current State" value={status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'} />
-        <StatusCard label="Active Path" value={activeJob?.name || 'None'} />
-        <StatusCard label="Queue Count" value={`${status?.queueLength || 0} Batches`} />
-      </div>
-
-      {/* Queue ready */}
-      {isIdleWithQueue && !isPaused && (
-        <div className="border border-sf p-6 bg-void-panel">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="nerv-title text-nerv text-base">Queue Ready</h3>
-              <p className="text-[10px] font-bold mt-1 text-steel-dim">{queue.length} job{queue.length !== 1 ? 's' : ''} waiting</p>
-            </div>
-            <button onClick={resumeEncode} title="Start processing queue" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Start</button>
-          </div>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+      <div className="lg:col-span-8 xl:col-span-9 space-y-4">
+        {/* Status cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <StatusCard label="Current State" value={status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'} />
+          <StatusCard label="Active Path" value={activeJob?.name || 'None'} />
+          <StatusCard label="Queue Count" value={`${status?.queueLength || 0} Batches`} />
         </div>
-      )}
 
-      {/* Paused */}
-      {isPaused && (
-        <div className="border border-nerv-dim/30 p-6 bg-void-panel">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="nerv-title text-nerv text-base">Encode Paused</h3>
-              <p className="text-[10px] font-bold mt-1 text-steel-dim">Job is waiting to resume</p>
+        {/* Queue ready */}
+        {isIdleWithQueue && !isPaused && (
+          <div className="border border-sf p-6 bg-void-panel">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="nerv-title text-nerv text-base">Queue Ready</h3>
+                <p className="text-[10px] font-bold mt-1 text-steel-dim">{queue.length} job{queue.length !== 1 ? 's' : ''} waiting</p>
+              </div>
+              <button onClick={resumeEncode} title="Start processing queue" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Start</button>
             </div>
+          </div>
+        )}
+
+        {/* Paused */}
+        {isPaused && (
+          <div className="border border-nerv-dim/30 p-6 bg-void-panel">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="nerv-title text-nerv text-base">Encode Paused</h3>
+                <p className="text-[10px] font-bold mt-1 text-steel-dim">Job is waiting to resume</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={resumeEncode} title="Resume encoding" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Resume</button>
+                <button onClick={stopEncode} title="Stop and remove from queue" className="p-2.5 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active encoding */}
+        {isEncoding && (
+          <div className="border border-data-green-dim/30 p-6 bg-void-panel space-y-4">
+            <div className="flex justify-between items-start">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-bold truncate text-steel">{activeJob?.name}</h3>
+                <p className="text-[10px] font-bold mt-1 text-data-green">
+                  {status.fileIndex && status.totalFiles ? `File ${status.fileIndex} of ${status.totalFiles}` : 'Starting...'}
+                  {status.phase === 'muxing' && ' — Muxing'}
+                </p>
+              </div>
+              <div className="flex items-center gap-3 ml-4">
+                <p className="text-3xl font-black tabular-nums text-data-green glow-green">{progress.toFixed(1)}%</p>
+                <button onClick={pauseEncode} title="Pause encoding" className="p-2.5 bg-nerv/15 text-nerv hover:bg-nerv hover:text-black transition-all active:scale-95"><Pause className="w-4 h-4" /></button>
+                <button onClick={stopEncode} title="Stop and remove from queue" className="p-2.5 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="w-full h-2 bg-void border border-sf overflow-hidden">
+              <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
+            </div>
+            {(status.fps || status.currentFrame || status.crop) && (
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                <StatChip label="Frames" value={status.currentFrame && status.totalFrames ? `${status.currentFrame} / ${status.totalFrames}` : status.currentFrame} />
+                <StatChip label="Speed" value={status.fps ? `${status.fps} fps` : null} />
+                <StatChip label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
+                <StatChip label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
+                <StatChip label="Elapsed" value={status.elapsed} />
+                <StatChip label="Remaining" value={status.eta} />
+                <StatChip label="Crop" value={status.crop} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Terminal log */}
+        <div className="panel overflow-hidden flex flex-col h-[600px]">
+          <div className="panel-header">
+            <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-nerv" /><span>Terminal Log</span></div>
             <div className="flex items-center gap-3">
-              <button onClick={resumeEncode} title="Resume encoding" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Resume</button>
-              <button onClick={stopEncode} title="Stop and remove from queue" className="p-2.5 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
+              {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[9px] font-bold uppercase text-wire-cyan hover:text-wire-cyan/80 transition-colors">Resume Scroll</button>}
+              <button onClick={() => setLogs([])} className="text-[9px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Active encoding */}
-      {isEncoding && (
-        <div className="border border-data-green-dim/30 p-6 bg-void-panel space-y-4">
-          <div className="flex justify-between items-start">
-            <div className="min-w-0 flex-1">
-              <h3 className="text-base font-bold truncate text-steel">{activeJob?.name}</h3>
-              <p className="text-[10px] font-bold mt-1 text-data-green">
-                {status.fileIndex && status.totalFiles ? `File ${status.fileIndex} of ${status.totalFiles}` : 'Starting...'}
-                {status.phase === 'muxing' && ' — Muxing'}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 ml-4">
-              <p className="text-3xl font-black tabular-nums text-data-green glow-green">{progress.toFixed(1)}%</p>
-              <button onClick={pauseEncode} title="Pause encoding" className="p-2.5 bg-nerv/15 text-nerv hover:bg-nerv hover:text-black transition-all active:scale-95"><Pause className="w-4 h-4" /></button>
-              <button onClick={stopEncode} title="Stop and remove from queue" className="p-2.5 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
-            </div>
+          <div ref={logRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[11px] leading-relaxed text-data-green-dim">
+            {logs.length === 0 && <p className="text-steel-dim/50 italic">Listening for output...</p>}
+            {logs.map((log, i) => <div key={i} className="mb-1 border-l border-sf pl-3 py-0.5 hover:bg-white/[0.02] text-data-green-dim">{log}</div>)}
           </div>
-          {/* Progress bar */}
-          <div className="w-full h-2 bg-void border border-sf overflow-hidden">
-            <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
-          </div>
-          {(status.fps || status.currentFrame || status.crop) && (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2">
-              <StatChip label="Frames" value={status.currentFrame && status.totalFrames ? `${status.currentFrame} / ${status.totalFrames}` : status.currentFrame} />
-              <StatChip label="Speed" value={status.fps ? `${status.fps} fps` : null} />
-              <StatChip label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
-              <StatChip label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
-              <StatChip label="Elapsed" value={status.elapsed} />
-              <StatChip label="Remaining" value={status.eta} />
-              <StatChip label="Crop" value={status.crop} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Terminal log */}
-      <div className="panel overflow-hidden flex flex-col h-[500px]">
-        <div className="panel-header">
-          <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-nerv" /><span>Terminal Log</span></div>
-          <div className="flex items-center gap-3">
-            {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[9px] font-bold uppercase text-wire-cyan hover:text-wire-cyan/80 transition-colors">Resume Scroll</button>}
-            <button onClick={() => setLogs([])} className="text-[9px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
-          </div>
-        </div>
-        <div ref={logRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[11px] leading-relaxed text-data-green-dim">
-          {logs.length === 0 && <p className="text-steel-dim/50 italic">Listening for output...</p>}
-          {logs.map((log, i) => <div key={i} className="mb-1 border-l border-sf pl-3 py-0.5 hover:bg-white/[0.02] text-data-green-dim">{log}</div>)}
         </div>
       </div>
-    </div>
-  );
-};
 
-const StatusCard = ({ label, value }) => {
-  return (
-    <div className="border border-sf p-4 bg-void-panel">
-      <p className="text-[8px] font-bold uppercase tracking-widest text-nerv mb-1.5">{label}</p>
-      <p className="text-sm font-bold truncate text-steel">{value}</p>
+      <div className="lg:col-span-4 xl:col-span-3 space-y-4">
+        <SystemMetricsPanel metrics={systemMetrics} />
+        <MiniQueue queue={queue} currentJob={activeJob} />
+      </div>
     </div>
   );
 };
@@ -487,70 +539,13 @@ const CATEGORY_COLORS = {
   defaults: 'bg-steel-dim/15 text-steel-dim',
 };
 
-const ToolsSection = ({ toolLogs, setToolLogs, toolStatus, toolLogRef, appSettings, favorites, toggleFavorite }) => {
-  const [tools, setTools] = useState([]);
-  const [category, setCategory] = useState('all');
-  const [selectedTool, setSelectedTool] = useState(null);
-  const [autoScroll, setAutoScroll] = useState(true);
-
-  useEffect(() => {
-    axios.get('/api/tools').then(r => setTools(r.data)).catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    if (autoScroll && toolLogRef.current) toolLogRef.current.scrollTop = toolLogRef.current.scrollHeight;
-  }, [toolLogs, autoScroll]);
-
-  const filtered = category === 'all' ? tools : tools.filter(t => t.category === category);
-  const handleScroll = () => {
-    if (!toolLogRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = toolLogRef.current;
-    setAutoScroll(scrollHeight - scrollTop - clientHeight < 60);
-  };
-  const stopTool = async () => { try { await axios.post(`/api/tools/${toolStatus?.toolId}/stop`); } catch (e) { console.error(e); } };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
-        {TOOL_CATEGORIES.map(cat => (
-          <button key={cat.id} onClick={() => setCategory(cat.id)} className={cn("px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all", category === cat.id ? "bg-nerv text-black" : "bg-void-panel border border-sf text-steel-dim hover:text-nerv hover:border-nerv-dim/30")}>{cat.label}</button>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-        {filtered.map(tool => (
-          <ToolCard key={tool.id} tool={tool} onConfigure={() => setSelectedTool(tool)} />
-        ))}
-      </div>
-      {(toolLogs.length > 0 || toolStatus?.running) && (
-        <div className="panel overflow-hidden flex flex-col h-[400px]">
-          <div className="panel-header">
-            <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5" /><span>Tool Output</span></div>
-            <div className="flex items-center gap-3">
-              {toolStatus?.running && <button onClick={stopTool} className="flex items-center gap-1.5 text-[9px] font-bold uppercase text-alert-red hover:text-alert-red/80 transition-colors"><StopCircle className="w-3 h-3" /> Stop</button>}
-              {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[9px] font-bold uppercase text-wire-cyan transition-colors">Resume Scroll</button>}
-              <button onClick={() => setToolLogs([])} className="text-[9px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
-            </div>
-          </div>
-          <div ref={toolLogRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[11px] leading-relaxed whitespace-pre-wrap text-data-green-dim">
-            {toolLogs.length === 0 && <p className="text-steel-dim/50 italic">Waiting for output...</p>}
-            {toolLogs.map((log, i) => <div key={i} className={cn("mb-0.5", log.includes('[Process exited') ? (log.includes('code 0') ? 'text-data-green' : 'text-alert-red') : '')}>{log}</div>)}
-          </div>
-        </div>
-      )}
-      {selectedTool && <ToolRunModal tool={selectedTool} onClose={() => setSelectedTool(null)} setToolLogs={setToolLogs} appSettings={appSettings} favorites={favorites} toggleFavorite={toggleFavorite} />}
-    </div>
-  );
-};
-
-const MODE_BADGES = {
-  'in-place': { label: 'Edits In Place', color: 'bg-nerv/15 text-nerv' },
-  'output': { label: 'Outputs to File', color: 'bg-data-green/15 text-data-green' },
-  'read-only': { label: 'Read Only', color: 'bg-wire-cyan/15 text-wire-cyan' },
-};
-
 const ToolCard = ({ tool, onConfigure }) => {
   const catColor = CATEGORY_COLORS[tool.category] || 'bg-steel-dim/15 text-steel-dim';
-  const modeBadge = MODE_BADGES[tool.mode];
+  const modeBadge = {
+    'in-place': { label: 'Edits In Place', color: 'bg-nerv/15 text-nerv' },
+    'output': { label: 'Outputs to File', color: 'bg-data-green/15 text-data-green' },
+    'read-only': { label: 'Read Only', color: 'bg-wire-cyan/15 text-wire-cyan' },
+  }[tool.mode];
   return (
     <div onClick={onConfigure} className="border border-sf p-4 flex flex-col transition-all hover:border-nerv-dim/30 cursor-pointer active:scale-[0.98] bg-void-panel">
       <div className="flex items-start justify-between mb-2">
@@ -614,7 +609,7 @@ const ToolRunModal = ({ tool, onClose, setToolLogs, appSettings, favorites, togg
       .catch(() => { if (!cancelled) setAudioTracks([]); })
       .finally(() => { if (!cancelled) setProbingAudio(false); });
     return () => { cancelled = true; };
-  }, [browsePath, envValues[activePathVar]]);
+  }, [browsePath, envValues[activePathVar], tool.id, activePathVar]);
 
   const browse = async (p) => {
     setBrowseLoading(true);
@@ -741,6 +736,61 @@ const ToolRunModal = ({ tool, onClose, setToolLogs, appSettings, favorites, togg
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+const ToolsSection = ({ toolLogs, setToolLogs, toolStatus, toolLogRef, appSettings, favorites, toggleFavorite }) => {
+  const [tools, setTools] = useState([]);
+  const [category, setCategory] = useState('all');
+  const [selectedTool, setSelectedTool] = useState(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  useEffect(() => {
+    axios.get('/api/tools').then(r => setTools(r.data)).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (autoScroll && toolLogRef.current) toolLogRef.current.scrollTop = toolLogRef.current.scrollHeight;
+  }, [toolLogs, autoScroll, toolLogRef]);
+
+  const filtered = category === 'all' ? tools : tools.filter(t => t.category === category);
+  const handleScroll = () => {
+    if (!toolLogRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = toolLogRef.current;
+    setAutoScroll(scrollHeight - scrollTop - clientHeight < 60);
+  };
+  const stopTool = async () => { try { await axios.post(`/api/tools/${toolStatus?.toolId}/stop`); } catch (e) { console.error(e); } };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-1.5">
+        {TOOL_CATEGORIES.map(cat => (
+          <button key={cat.id} onClick={() => setCategory(cat.id)} className={cn("px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all", category === cat.id ? "bg-nerv text-black" : "bg-void-panel border border-sf text-steel-dim hover:text-nerv hover:border-nerv-dim/30")}>{cat.label}</button>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        {filtered.map(tool => (
+          <ToolCard key={tool.id} tool={tool} onConfigure={() => setSelectedTool(tool)} />
+        ))}
+      </div>
+      {(toolLogs.length > 0 || toolStatus?.running) && (
+        <div className="panel overflow-hidden flex flex-col h-[400px]">
+          <div className="panel-header">
+            <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5" /><span>Tool Output</span></div>
+            <div className="flex items-center gap-3">
+              {toolStatus?.running && <button onClick={stopTool} className="flex items-center gap-1.5 text-[9px] font-bold uppercase text-alert-red hover:text-alert-red/80 transition-colors"><StopCircle className="w-3 h-3" /> Stop</button>}
+              {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[9px] font-bold uppercase text-wire-cyan transition-colors">Resume Scroll</button>}
+              <button onClick={() => setToolLogs([])} className="text-[9px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
+            </div>
+          </div>
+          <div ref={toolLogRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[11px] leading-relaxed whitespace-pre-wrap text-data-green-dim">
+            {toolLogs.length === 0 && <p className="text-steel-dim/50 italic">Waiting for output...</p>}
+            {toolLogs.map((log, i) => <div key={i} className={cn("mb-0.5", log.includes('[Process exited') ? (log.includes('code 0') ? 'text-data-green' : 'text-alert-red') : '')}>{log}</div>)}
+          </div>
+        </div>
+      )}
+      {selectedTool && <ToolRunModal tool={selectedTool} onClose={() => setSelectedTool(null)} setToolLogs={setToolLogs} appSettings={appSettings} favorites={favorites} toggleFavorite={toggleFavorite} />}
     </div>
   );
 };
@@ -1218,6 +1268,134 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+// --- Main App Component ---
+
+const App = () => {
+  const [status, setStatus] = useState(null);
+  const [systemMetrics, setSystemMetrics] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [buildLogs, setBuildLogs] = useState({});
+  const [queue, setQueue] = useState([]);
+  const [encoders, setEncoders] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const logRef = useRef(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [toolLogs, setToolLogs] = useState([]);
+  const [toolStatus, setToolStatus] = useState(null);
+  const [appSettings, setAppSettings] = useState({});
+  const toolLogRef = useRef(null);
+  const [isTestEncodeOpen, setIsTestEncodeOpen] = useState(false);
+  const [testEncodeStatus, setTestEncodeStatus] = useState(null);
+  const [versionInfo, setVersionInfo] = useState({ version: null, channel: 'release' });
+  const [crtEnabled, setCrtEnabled] = useState(() => localStorage.getItem('crt-effects') !== 'off');
+
+  useEffect(() => {
+    localStorage.setItem('crt-effects', crtEnabled ? 'on' : 'off');
+    document.documentElement.toggleAttribute('data-crt-off', !crtEnabled);
+  }, [crtEnabled]);
+
+  const fetchEncoders = useCallback(async () => { try { const res = await axios.get('/api/encoders'); setEncoders(res.data); } catch (err) { console.error(err); } }, []);
+  const fetchQueue = useCallback(async () => { try { const res = await axios.get('/api/queue'); setQueue(res.data); } catch (err) { console.error(err); } }, []);
+  const fetchSettings = useCallback(async () => { try { const res = await axios.get('/api/settings'); setAppSettings(res.data); } catch (err) { console.error(err); } }, []);
+
+  useEffect(() => {
+    socket.on('status', (data) => setStatus(prev => {
+      const sameFile = prev?.currentFile === data.currentFile && data.status === 'encoding';
+      return { ...data, crop: data.crop || (sameFile ? prev?.crop : undefined) };
+    }));
+    socket.on('logs', (data) => setLogs(prev => [...prev.slice(-499), data]));
+    socket.on('build_logs', (data) => setBuildLogs(prev => ({ ...prev, [data.encoder]: [...(prev[data.encoder] || []).slice(-499), data.log] })));
+    socket.on('queue_update', (data) => setQueue(data));
+    socket.on('build_complete', () => fetchEncoders());
+    socket.on('tool_output', (data) => setToolLogs(prev => [...prev.slice(-499), data]));
+    socket.on('tool_status', (data) => setToolStatus(data));
+    socket.on('test_encode_status', (data) => { setTestEncodeStatus(data); if (data.phase === 'done') setActiveTab('compare'); });
+    
+    fetchEncoders(); fetchQueue(); fetchSettings();
+    axios.get('/api/version').then(res => setVersionInfo(res.data)).catch(() => {});
+
+    const metricsInterval = setInterval(() => {
+      axios.get('/api/system/metrics').then(res => setSystemMetrics(res.data)).catch(() => {});
+    }, 3000);
+
+    return () => { 
+      socket.off('status'); socket.off('logs'); socket.off('build_logs'); socket.off('queue_update'); 
+      socket.off('build_complete'); socket.off('tool_output'); socket.off('tool_status'); socket.off('test_encode_status'); 
+      clearInterval(metricsInterval);
+    };
+  }, [fetchEncoders, fetchQueue, fetchSettings]);
+
+  useEffect(() => { if (autoScroll && logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [logs, autoScroll]);
+
+  const buildEncoder = async (name, branch) => { try { await axios.post(`/api/encoders/${name}/build`, { branch }); } catch (err) { alert(err.message); } };
+  const saveAppSettings = async (newSettings) => { try { const res = await axios.post('/api/settings', newSettings); setAppSettings(res.data); } catch (err) { console.error(err); } };
+  const toggleFavorite = async (dirPath) => {
+    try { const res = await axios.post('/api/favorites/toggle', { path: dirPath }); setAppSettings(prev => ({ ...prev, favorites: res.data.favorites })); } catch (err) { console.error(err); }
+  };
+
+  const statusActive = status?.active;
+  const toolRunning = toolStatus?.running;
+  const testRunning = testEncodeStatus?.running;
+
+  return (
+    <div className="flex h-screen font-sys bg-void text-steel">
+      {/* Sidebar */}
+      <aside className="w-56 border-r border-sf bg-void flex flex-col shrink-0">
+        <div className="px-5 py-4 border-b border-b-orange flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 bg-nerv flex items-center justify-center font-title font-black text-black text-sm">P</div>
+            <h1 className="nerv-title text-nerv text-sm" style={{ lineHeight: 1 }}>PRISM</h1>
+          </div>
+          <span className="text-[9px] px-1.5 py-0.5 font-sys font-bold text-nerv-dim border border-nerv-dim/30">
+            {versionInfo.channel === 'nightly' ? 'DEV' : (versionInfo.version ? `V${versionInfo.version}` : '')}
+          </span>
+        </div>
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+          <NavItem icon={<Activity className="w-3.5 h-3.5" />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+          <NavItem icon={<List className="w-3.5 h-3.5" />} label="Queue" active={activeTab === 'queue'} onClick={() => setActiveTab('queue')} />
+          <NavItem icon={<Cpu className="w-3.5 h-3.5" />} label="Encoders" active={activeTab === 'encoders'} onClick={() => setActiveTab('encoders')} />
+          <NavItem icon={<Wrench className="w-3.5 h-3.5" />} label="Tools" active={activeTab === 'tools'} onClick={() => setActiveTab('tools')} />
+          <NavItem icon={<FlaskConical className="w-3.5 h-3.5" />} label="Compare" active={activeTab === 'compare'} onClick={() => setActiveTab('compare')} />
+        </nav>
+        <div className="p-3 space-y-2 border-t border-sf">
+          <div className="relative">
+            <button onClick={() => setSettingsOpen(!settingsOpen)} className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold transition-all", settingsOpen ? "text-nerv bg-nerv/10" : "text-steel-dim hover:text-nerv")}>
+              <Settings className="w-3.5 h-3.5" /> SETTINGS
+            </button>
+            {settingsOpen && <SettingsPanel appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} />}
+          </div>
+          <button onClick={() => setIsModalOpen(true)} className="w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 tracking-wider uppercase">
+            <Plus className="w-3.5 h-3.5" />Add Batch
+          </button>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main className="flex-1 overflow-auto bg-void">
+        <header className="h-12 border-b border-sf flex items-center justify-between px-6 bg-void sticky top-0 z-10">
+          <h2 className="nerv-title text-nerv text-[11px] uppercase tracking-[0.2em]">{activeTab}</h2>
+          <div className="flex items-center gap-3">
+            {testRunning && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-wire-cyan animate-pulse tracking-wider"><FlaskConical className="w-3 h-3" /> TEST ENCODE</div>}
+            {toolRunning && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-nerv animate-pulse tracking-wider"><Wrench className="w-3 h-3" /> {toolStatus.toolName?.toUpperCase()}</div>}
+            {statusActive && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-data-green animate-pulse tracking-wider">{status.status?.toUpperCase()}</div>}
+          </div>
+        </header>
+        <div className="p-6 max-w-[1800px] mx-auto">
+          {activeTab === 'dashboard' && <Dashboard status={status} queue={queue} logs={logs} logRef={logRef} setLogs={setLogs} autoScroll={autoScroll} setAutoScroll={setAutoScroll} systemMetrics={systemMetrics} />}
+          {activeTab === 'queue' && <QueueSection queue={queue} />}
+          {activeTab === 'encoders' && <EncodersSection encoders={encoders} buildEncoder={buildEncoder} buildLogs={buildLogs} />}
+          {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
+          {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} />}
+        </div>
+      </main>
+      {isModalOpen && <AddBatchModal onClose={() => setIsModalOpen(false)} encoders={encoders} onSuccess={() => { setIsModalOpen(false); fetchQueue(); }} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
+      {isTestEncodeOpen && <TestEncodeModal onClose={() => setIsTestEncodeOpen(false)} encoders={encoders} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
     </div>
   );
 };

@@ -7,6 +7,10 @@
    Adapted from https://github.com/TheGreatGildo/nerv-ui
    ═══════════════════════════════════════════════════════════════ */
 
+html {
+  zoom: 1.25;
+}
+
 :root {
   --void:             #000000;
   --void-warm:        #080807;
