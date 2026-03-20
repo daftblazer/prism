@@ -8,9 +8,11 @@ const { v4: uuidv4 } = require('uuid');
 const { spawn } = require('child_process');
 const os = require('os');
 
-console.log("####################################");
-console.log(">>> PRISM SERVER V0.1.0 STARTING <<<");
-console.log("####################################");
+console.log("──────────────────────────────────────────────");
+console.log("  PRISM // SYSTEM CONTROL v0.1.0");
+console.log("  STATUS:      INITIALIZING");
+console.log("  ENVIRONMENT: NODE / " + process.platform.toUpperCase());
+console.log("──────────────────────────────────────────────");
 
 const app = express();
 app.use(cors());
@@ -195,7 +197,7 @@ class Worker {
 
   async processBatch(batch) {
     const { input_folder, encoder, crf, preset, tune, custom_flags, subfolder } = batch;
-    if (!(await fs.pathExists(input_folder))) { this.log(`Path missing: ${input_folder}`, 'error'); return; }
+    if (!(await fs.pathExists(input_folder))) { this.log(`PATH NOT FOUND — ${input_folder} — aborting batch`, 'error'); return; }
     const stats = await fs.stat(input_folder);
     let files = [];
     if (stats.isDirectory()) {
@@ -232,8 +234,8 @@ class Worker {
   async encodeFile(file, batch, onProgress) {
     const probeInfo = await probeVideo(file);
     const totalFrames = probeInfo.totalFrames;
-    if (totalFrames > 0) this.log(`Probed total frames for ${path.basename(file)}: ${totalFrames}`, 'info');
-    else this.log(`Could not determine total frames for ${path.basename(file)} - progress may be unavailable`, 'info');
+    if (totalFrames > 0) this.log(`Target acquired: ${path.basename(file)} — ${totalFrames} frames locked`, 'info');
+    else this.log(`Target acquired: ${path.basename(file)} — frame count unknown, limited telemetry`, 'info');
     
     return new Promise((resolve) => {
       const { input_folder, encoder, crf, preset, tune, custom_flags, subfolder, auto_crop, crop, rename_audio } = batch;
@@ -291,17 +293,117 @@ class Worker {
       
       child.on('close', (code) => { 
         currentChild = null; 
-        if (code !== 0) this.log(`Encode of ${path.basename(file)} failed with code ${code}`, 'error');
-        else this.log(`Encode of ${path.basename(file)} finished successfully`, 'info');
+        if (code !== 0) this.log(`ENCODE FAILED — ${path.basename(file)} — exit code ${code}`, 'error');
+        else this.log(`ENCODE COMPLETE — ${path.basename(file)} — all systems nominal`, 'info');
         resolve(); 
       });
     });
   }
 
   log(msg, type = 'info') {
-    const clean = stripAnsi(msg);
-    const entry = `[${new Date().toISOString()}] [${type.toUpperCase()}] ${clean}`;
-    console.log(entry); io.emit('logs', entry);
+    const raw = stripAnsi(msg).trim();
+    if (!raw) return;
+    const ts = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+
+    // Split multi-line chunks and process each line
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      this._logLine(line, type, ts);
+    }
+  }
+
+  _logLine(line, type, ts) {
+    // Skip separator lines and empty SVT noise
+    if (/^-{3,}$/.test(line) || /^Svt\[info\]:\s*-{3,}/.test(line) || /^Svt\[info\]:\s*$/.test(line)) return;
+
+    // Encoding progress telemetry — update in place
+    const encMatch = line.match(/(?:Encoding:\s*)?(\d+)(?:\s*\/\s*(\d+))?\s+Frames?\s*@\s*([\d.]+)\s*fp[sm]\s*\|\s*([\d.]+)\s*kb\/s\s*\|\s*Size:\s*([\d.]+)\s*MB(?:\s*\[([\d.]+)\s*MB\])?\s*\|\s*Time:\s*([\d:]+)(?:\s*\[-([\d:]+)\])?/);
+    if (encMatch) {
+      const [, frame, total, fps, bitrate, size, estSize, elapsed, eta] = encMatch;
+      const frameStr = total ? `${frame} / ${total}` : frame;
+      const sizeStr = estSize ? `${size} / ~${estSize} MB` : `${size} MB`;
+      const out = [
+        `[PRISM] ${ts} ── ENCODE TELEMETRY ──`,
+        `        FRAME: ${frameStr.padEnd(16)} SPEED: ${fps} fps`,
+        `        RATE:  ${(bitrate + ' kb/s').padEnd(16)} SIZE:  ${sizeStr}`,
+        `        TIME:  ${elapsed.padEnd(16)}${eta ? ' ETA:   ' + eta : ''}`,
+      ].join('\n');
+      console.log(out); io.emit('logs', { type: 'encode', text: out });
+      return;
+    }
+
+    // Input/output path lines
+    const inputM = line.match(/🎬\s*Input\s*:\s*(.+)/);
+    if (inputM) {
+      const entry = `[PRISM] ${ts} ── FILE ROUTING ──\n        INPUT:  ${inputM[1]}`;
+      console.log(entry); io.emit('logs', { type: 'init', text: entry });
+      return;
+    }
+    const outputM = line.match(/(?:➡️\s*)?Output\s*:\s*(.+)/);
+    if (outputM) {
+      const entry = `        OUTPUT: ${outputM[1]}`;
+      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
+      return;
+    }
+
+    // Source metadata lines (==> ...)
+    const srcFpsM = line.match(/==>\s*Source FPS:\s*(.+)/);
+    if (srcFpsM) {
+      const entry = `[PRISM] ${ts} ── SOURCE ANALYSIS ──\n        FPS: ${srcFpsM[1]}`;
+      console.log(entry); io.emit('logs', { type: 'init', text: entry });
+      return;
+    }
+    const colorM = line.match(/==>\s*Color:\s*primaries=(\S+)\s+transfer=(\S+)\s+matrix=(\S+)\s+range=(\S+)/);
+    if (colorM) {
+      const rangeStr = colorM[4] === '0' ? 'Limited' : colorM[4] === '1' ? 'Full' : colorM[4];
+      const entry = `        PRIMARIES: ${colorM[1].padEnd(12)} TRANSFER: ${colorM[2]}\n        MATRIX:    ${colorM[3].padEnd(12)} RANGE:    ${rangeStr}`;
+      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
+      return;
+    }
+    if (/==>\s*Detecting color/.test(line)) return; // suppress, color data follows
+
+    // Encoding start line (==> Encoding video ...)
+    const encStartM = line.match(/==>\s*Encoding video\s*\((.+?)\)/);
+    if (encStartM) {
+      const entry = `[PRISM] ${ts} ── ENCODER ENGAGED ──\n        CONFIG: ${encStartM[1]}`;
+      console.log(entry); io.emit('logs', { type: 'init', text: entry });
+      return;
+    }
+
+    // SVT version line
+    const svtVerM = line.match(/SVT \[version\]:\s*(.+)/);
+    if (svtVerM) {
+      const entry = `        ENGINE: ${svtVerM[1]}`;
+      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
+      return;
+    }
+    // SVT build line
+    const svtBuildM = line.match(/SVT \[build\]\s*:\s*(.+)/);
+    if (svtBuildM) {
+      const entry = `        BUILD:  ${svtBuildM[1]}`;
+      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
+      return;
+    }
+
+    // SVT config lines — compact format
+    const svtCfgM = line.match(/SVT \[config\]:\s*(.+?)\s{2,}:\s*(.+)/);
+    if (svtCfgM) {
+      const key = svtCfgM[1].trim().toUpperCase().replace(/\s*\/\s*/g, ' / ');
+      const val = svtCfgM[2].trim();
+      const entry = `        ${key.padEnd(50)} ${val}`;
+      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
+      return;
+    }
+    // Skip other Svt[info] noise (parallelism, PPCS, asm level)
+    if (/^Svt\[info\]:/.test(line)) return;
+
+    // Skip bare "Encoding" line (the single word before telemetry starts)
+    if (/^Encoding$/.test(line)) return;
+
+    // Default formatting
+    const TAG = type === 'error' ? 'ERR!' : type === 'stderr' ? 'WARN' : 'SYS ';
+    const entry = `[PRISM] ${ts} [${TAG}] ${line}`;
+    console.log(entry); io.emit('logs', { type, text: entry });
   }
 }
 
@@ -959,5 +1061,5 @@ app.get('/api/version', (req, res) => res.json({ version: '0.1.0', channel: 'rel
 if (fs.existsSync(frontendDist)) app.get('*', (req, res) => { if (!req.path.startsWith('/api')) res.sendFile(path.join(frontendDist, 'index.html')); });
 
 loadQueue().then(() => {
-  server.listen(PORT, () => { console.log(`Server on ${PORT}`); if (queue.length > 0) console.log(`Queue has ${queue.length} job(s) — waiting for manual resume`); });
+  server.listen(PORT, () => { console.log(`[PRISM] System online — port ${PORT}`); if (queue.length > 0) console.log(`[PRISM] Queue loaded — ${queue.length} job(s) standing by`); });
 });

@@ -497,8 +497,13 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
           </div>
         </div>
         <div ref={logRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[17px] leading-relaxed text-data-green-dim min-h-0">
-          {logs.length === 0 && <p className="text-steel-dim/50 italic">Listening for output...</p>}
-          {logs.map((log, i) => <div key={i} className="mb-1 border-l border-sf pl-3 py-0.5 hover:bg-steel/[0.05] text-data-green-dim">{log}</div>)}
+          {logs.length === 0 && <p className="text-steel-dim/50 italic uppercase tracking-widest text-[12px]">[PRISM] Awaiting telemetry feed...</p>}
+          {logs.map((log, i) => {
+            const entry = typeof log === 'string' ? { type: 'info', text: log } : log;
+            const colorClass = entry.type === 'encode' ? 'text-data-green' : entry.type === 'init' ? 'text-wire-cyan' : entry.type === 'error' ? 'text-alert-red' : entry.type === 'stderr' ? 'text-nerv' : 'text-steel';
+            const borderClass = entry.type === 'encode' ? 'border-data-green/30' : entry.type === 'init' ? 'border-wire-cyan/30' : entry.type === 'error' ? 'border-alert-red/30' : 'border-sf';
+            return <pre key={i} className={cn("mb-1 border-l-2 pl-3 py-0.5 hover:bg-steel/[0.03] whitespace-pre-wrap font-sys text-[13px] leading-snug", colorClass, borderClass)}>{entry.text}</pre>;
+          })}
         </div>
       </div>
 
@@ -1494,7 +1499,24 @@ const App = () => {
       const sameFile = prev?.currentFile === data.currentFile && data.status === 'encoding';
       return { ...data, crop: data.crop || (sameFile ? prev?.crop : undefined) };
     }));
-    socket.on('logs', (data) => setLogs(prev => [...prev.slice(-499), data]));
+    socket.on('logs', (data) => setLogs(prev => {
+      const entry = typeof data === 'string' ? { type: 'info', text: data } : data;
+      // Encode telemetry: replace last encode entry in-place
+      if (entry.type === 'encode' && prev.length > 0) {
+        const last = prev[prev.length - 1];
+        if (last && (typeof last !== 'string') && last.type === 'encode') {
+          return [...prev.slice(0, -1), entry];
+        }
+      }
+      // Init append: merge with the last init/init_append entry
+      if (entry.type === 'init_append' && prev.length > 0) {
+        const last = prev[prev.length - 1];
+        if (last && (typeof last !== 'string') && (last.type === 'init' || last.type === 'init_append')) {
+          return [...prev.slice(0, -1), { type: 'init', text: last.text + '\n' + entry.text }];
+        }
+      }
+      return [...prev.slice(-499), entry];
+    }));
     socket.on('build_logs', (data) => setBuildLogs(prev => ({ ...prev, [data.encoder]: [...(prev[data.encoder] || []).slice(-499), data.log] })));
     socket.on('queue_update', (data) => setQueue(data));
     socket.on('build_complete', () => fetchEncoders());
