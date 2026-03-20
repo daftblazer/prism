@@ -229,100 +229,122 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
   const isEncoding = status?.active && status.status === 'encoding';
   const isPaused = status?.status === 'paused';
   const isIdleWithQueue = status?.status === 'idle' && queue.length > 0;
+  const gridStyle = isEncoding || isPaused ? {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr minmax(280px, 320px)',
+    gridTemplateRows: 'auto 1fr',
+    gridTemplateAreas: `"encode encode sidebar" "terminal terminal sidebar"`,
+    flex: '1 1 0%',
+    minHeight: 0,
+    gap: '12px',
+    padding: '16px',
+  } : {
+    display: 'grid',
+    gridTemplateColumns: '1fr minmax(280px, 320px)',
+    gridTemplateRows: 'auto 1fr',
+    gridTemplateAreas: `"status sidebar" "terminal sidebar"`,
+    flex: '1 1 0%',
+    minHeight: 0,
+    gap: '12px',
+    padding: '16px',
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-      <div className="lg:col-span-8 xl:col-span-9 space-y-4">
-        {/* Status cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <StatusCard label="Current State" value={status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'} />
-          <StatusCard label="Active Path" value={activeJob?.name || 'None'} />
-          <StatusCard label="Queue Count" value={`${status?.queueLength || 0} Batches`} />
-        </div>
-
-        {/* Queue ready */}
-        {isIdleWithQueue && !isPaused && (
-          <div className="border border-sf p-6 bg-void-panel">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="nerv-title text-nerv text-base">Queue Ready</h3>
-                <p className="text-[10px] font-bold mt-1 text-steel-dim">{queue.length} job{queue.length !== 1 ? 's' : ''} waiting</p>
+    <div style={gridStyle}>
+      {/* Top-left: encode panel or status cards */}
+      {(isEncoding || isPaused) ? (
+        <div style={{ gridArea: 'encode' }} className="border border-data-green-dim/30 p-5 bg-void-panel space-y-4 min-h-0">
+          <div className="flex justify-between items-start">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-3 mb-1">
+                <h3 className="text-base font-bold truncate text-steel">{activeJob?.name || 'Encode Operation'}</h3>
+                <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-nerv bg-nerv/5">
+                  {status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'}
+                </span>
+                <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-steel-dim">
+                  {`${status?.queueLength || 0} Queued`}
+                </span>
               </div>
-              <button onClick={resumeEncode} title="Start processing queue" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Start</button>
-            </div>
-          </div>
-        )}
-
-        {/* Paused */}
-        {isPaused && (
-          <div className="border border-nerv-dim/30 p-6 bg-void-panel">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="nerv-title text-nerv text-base">Encode Paused</h3>
-                <p className="text-[10px] font-bold mt-1 text-steel-dim">Job is waiting to resume</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button onClick={resumeEncode} title="Resume encoding" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Resume</button>
-                <button onClick={stopEncode} title="Stop and remove from queue" className="p-2.5 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Active encoding */}
-        {isEncoding && (
-          <div className="border border-data-green-dim/30 p-6 bg-void-panel space-y-4">
-            <div className="flex justify-between items-start">
-              <div className="min-w-0 flex-1">
-                <h3 className="text-base font-bold truncate text-steel">{activeJob?.name}</h3>
-                <p className="text-[10px] font-bold mt-1 text-data-green">
+              {isEncoding && (
+                <p className="text-[10px] font-bold text-data-green">
                   {status.fileIndex && status.totalFiles ? `File ${status.fileIndex} of ${status.totalFiles}` : 'Starting...'}
                   {status.phase === 'muxing' && ' — Muxing'}
                 </p>
-              </div>
-              <div className="flex items-center gap-3 ml-4">
-                <p className="text-3xl font-black tabular-nums text-data-green glow-green">{progress.toFixed(1)}%</p>
+              )}
+              {isPaused && <p className="text-[10px] font-bold text-nerv-dim">Job is waiting to resume</p>}
+            </div>
+            <div className="flex items-center gap-3 ml-4">
+              {isEncoding && <p className="text-3xl font-black tabular-nums text-data-green glow-green">{progress.toFixed(1)}%</p>}
+              {isPaused && (
+                <button onClick={resumeEncode} title="Resume encoding" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Resume</button>
+              )}
+              {isEncoding && (
                 <button onClick={pauseEncode} title="Pause encoding" className="p-2.5 bg-nerv/15 text-nerv hover:bg-nerv hover:text-black transition-all active:scale-95"><Pause className="w-4 h-4" /></button>
-                <button onClick={stopEncode} title="Stop and remove from queue" className="p-2.5 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
+              )}
+              <button onClick={stopEncode} title="Stop and remove from queue" className="p-2.5 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
+            </div>
+          </div>
+          {isEncoding && (
+            <>
+              <div className="w-full h-2 bg-void border border-sf overflow-hidden">
+                <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
               </div>
-            </div>
-            {/* Progress bar */}
-            <div className="w-full h-2 bg-void border border-sf overflow-hidden">
-              <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
-            </div>
-            {(status.fps || status.currentFrame || status.crop) && (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
-                <StatChip label="Frames" value={status.currentFrame && status.totalFrames ? `${status.currentFrame} / ${status.totalFrames}` : status.currentFrame} />
-                <StatChip label="Speed" value={status.fps ? `${status.fps} fps` : null} />
-                <StatChip label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
-                <StatChip label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
-                <StatChip label="Elapsed" value={status.elapsed} />
-                <StatChip label="Remaining" value={status.eta} />
-                <StatChip label="Crop" value={status.crop} />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Terminal log */}
-        <div className="panel overflow-hidden flex flex-col h-[600px]">
-          <div className="panel-header">
-            <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-nerv" /><span>Terminal Log</span></div>
-            <div className="flex items-center gap-3">
-              {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[9px] font-bold uppercase text-wire-cyan hover:text-wire-cyan/80 transition-colors">Resume Scroll</button>}
-              <button onClick={() => setLogs([])} className="text-[9px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
-            </div>
-          </div>
-          <div ref={logRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[11px] leading-relaxed text-data-green-dim">
-            {logs.length === 0 && <p className="text-steel-dim/50 italic">Listening for output...</p>}
-            {logs.map((log, i) => <div key={i} className="mb-1 border-l border-sf pl-3 py-0.5 hover:bg-white/[0.02] text-data-green-dim">{log}</div>)}
-          </div>
+              {(status.fps || status.currentFrame || status.crop) && (
+                <div className="grid grid-cols-7 gap-2">
+                  <StatChip label="Frames" value={status.currentFrame && status.totalFrames ? `${status.currentFrame} / ${status.totalFrames}` : status.currentFrame} />
+                  <StatChip label="Speed" value={status.fps ? `${status.fps} fps` : null} />
+                  <StatChip label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
+                  <StatChip label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
+                  <StatChip label="Elapsed" value={status.elapsed} />
+                  <StatChip label="Remaining" value={status.eta} />
+                  <StatChip label="Crop" value={status.crop} />
+                </div>
+              )}
+            </>
+          )}
         </div>
-      </div>
+      ) : (
+        <div style={{ gridArea: 'status' }} className="space-y-3 min-h-0">
+          <div className="grid grid-cols-3 gap-3">
+            <StatusCard label="Current State" value={status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'} />
+            <StatusCard label="Active Path" value={activeJob?.name || 'None'} />
+            <StatusCard label="Queue Count" value={`${status?.queueLength || 0} Batches`} />
+          </div>
+          {isIdleWithQueue && (
+            <div className="border border-sf p-5 bg-void-panel">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="nerv-title text-nerv text-base">Queue Ready</h3>
+                  <p className="text-[10px] font-bold mt-1 text-steel-dim">{queue.length} job{queue.length !== 1 ? 's' : ''} waiting</p>
+                </div>
+                <button onClick={resumeEncode} title="Start processing queue" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Start</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
-      <div className="lg:col-span-4 xl:col-span-3 space-y-4">
+      {/* Right column: metrics + queue */}
+      <div style={{ gridArea: 'sidebar' }} className="min-h-0 overflow-auto flex flex-col gap-3">
         <SystemMetricsPanel metrics={systemMetrics} />
         <MiniQueue queue={queue} currentJob={activeJob} />
       </div>
+
+      {/* Bottom-left: terminal log — fills remaining height */}
+      <div style={{ gridArea: 'terminal' }} className="panel overflow-hidden flex flex-col min-h-0">
+        <div className="panel-header">
+          <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-nerv" /><span>Terminal Log</span></div>
+          <div className="flex items-center gap-3">
+            {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[9px] font-bold uppercase text-wire-cyan hover:text-wire-cyan/80 transition-colors">Resume Scroll</button>}
+            <button onClick={() => setLogs([])} className="text-[9px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
+          </div>
+        </div>
+        <div ref={logRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[11px] leading-relaxed text-data-green-dim min-h-0">
+          {logs.length === 0 && <p className="text-steel-dim/50 italic">Listening for output...</p>}
+          {logs.map((log, i) => <div key={i} className="mb-1 border-l border-sf pl-3 py-0.5 hover:bg-white/[0.02] text-data-green-dim">{log}</div>)}
+        </div>
+      </div>
+
     </div>
   );
 };
@@ -1377,8 +1399,8 @@ const App = () => {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto bg-void">
-        <header className="h-12 border-b border-sf flex items-center justify-between px-6 bg-void sticky top-0 z-10">
+      <main className="flex-1 flex flex-col overflow-hidden bg-void">
+        <header className="h-12 shrink-0 border-b border-sf flex items-center justify-between px-6 bg-void z-10">
           <h2 className="nerv-title text-nerv text-[11px] uppercase tracking-[0.2em]">{activeTab}</h2>
           <div className="flex items-center gap-3">
             {testRunning && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-wire-cyan animate-pulse tracking-wider"><FlaskConical className="w-3 h-3" /> TEST ENCODE</div>}
@@ -1386,8 +1408,8 @@ const App = () => {
             {statusActive && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-data-green animate-pulse tracking-wider">{status.status?.toUpperCase()}</div>}
           </div>
         </header>
-        <div className="p-6 max-w-[1800px] mx-auto">
-          {activeTab === 'dashboard' && <Dashboard status={status} queue={queue} logs={logs} logRef={logRef} setLogs={setLogs} autoScroll={autoScroll} setAutoScroll={setAutoScroll} systemMetrics={systemMetrics} />}
+        {activeTab === 'dashboard' && <Dashboard status={status} queue={queue} logs={logs} logRef={logRef} setLogs={setLogs} autoScroll={autoScroll} setAutoScroll={setAutoScroll} systemMetrics={systemMetrics} />}
+        <div className="flex-1 overflow-auto p-6 max-w-[1800px] mx-auto w-full">
           {activeTab === 'queue' && <QueueSection queue={queue} />}
           {activeTab === 'encoders' && <EncodersSection encoders={encoders} buildEncoder={buildEncoder} buildLogs={buildLogs} />}
           {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
