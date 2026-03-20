@@ -8,6 +8,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 html {
+  font-size: 18px;
 }
 
 :root {
@@ -211,12 +212,12 @@ html[data-compare-active] body { animation: none !important; }
 
 .panel-header {
   font-family: var(--font-sys);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--nerv-orange);
-  padding: 6px 10px 5px;
+  padding: 9px 15px 8px;
   border-bottom: 1px solid var(--nerv-orange-dim);
   display: flex;
   justify-content: space-between;
@@ -225,13 +226,13 @@ html[data-compare-active] body { animation: none !important; }
 }
 
 .panel-header .tag {
-  font-size: 7px;
+  font-size: 11px;
   color: var(--steel-dim);
   letter-spacing: 0.08em;
 }
 
 .panel-body {
-  padding: 8px 10px;
+  padding: 12px 15px;
   flex: 1;
   min-height: 0;
 }

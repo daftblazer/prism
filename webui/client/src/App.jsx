@@ -22,14 +22,14 @@ const SettingsPanel = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled
   return (
     <div className="absolute bottom-full left-0 w-full mb-2 p-4 border border-sf bg-void-panel shadow-2xl z-50 space-y-4">
       <div>
-        <span className="text-[9px] font-bold uppercase tracking-widest text-nerv">Release Group</span>
+        <span className="text-[14px] font-bold uppercase tracking-widest text-nerv">Release Group</span>
         <div className="flex gap-2 mt-2">
           <input type="text" value={releaseGroup} onChange={e => setReleaseGroup(e.target.value)} onBlur={handleReleaseGroupSave} onKeyDown={e => e.key === 'Enter' && handleReleaseGroupSave()} placeholder="e.g. ED3N, Judas" className="flex-1 border border-sf bg-void px-3 py-1.5 text-xs font-bold text-steel font-sys" />
         </div>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-[9px] font-bold uppercase tracking-widest text-nerv">CRT Effects</span>
-        <button onClick={() => setCrtEnabled(!crtEnabled)} className={cn("px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all border", crtEnabled ? "border-data-green/30 bg-data-green/10 text-data-green" : "border-sf bg-void text-steel-dim")}>
+        <span className="text-[14px] font-bold uppercase tracking-widest text-nerv">CRT Effects</span>
+        <button onClick={() => setCrtEnabled(!crtEnabled)} className={cn("px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border", crtEnabled ? "border-data-green/30 bg-data-green/10 text-data-green" : "border-sf bg-void text-steel-dim")}>
           {crtEnabled ? 'On' : 'Off'}
         </button>
       </div>
@@ -47,7 +47,7 @@ const StatChip = ({ label, value }) => {
   if (!value && value !== 0) return null;
   return (
     <div className="px-3 py-2 border border-sf bg-void-panel">
-      <p className="text-[8px] font-bold uppercase tracking-widest text-nerv mb-0.5">{label}</p>
+      <p className="text-[12px] font-bold uppercase tracking-widest text-nerv mb-0.5">{label}</p>
       <p className="text-xs font-bold tabular-nums text-data-green glow-green">{value}</p>
     </div>
   );
@@ -78,7 +78,7 @@ const SystemMetricsPanel = ({ metrics }) => {
         <div className="space-y-3">
           <div className="flex justify-between items-end">
             <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-nerv-dim uppercase tracking-widest">Central Processing Unit</span>
+              <span className="text-[14px] font-bold text-nerv-dim uppercase tracking-widest">Central Processing Unit</span>
               <span className="text-xs font-bold text-steel font-mincho">中央処理装置</span>
             </div>
             <span className="text-4xl font-black text-data-green glow-green tabular-nums leading-none">{cpuPercent.toFixed(1)}%</span>
@@ -102,13 +102,13 @@ const SystemMetricsPanel = ({ metrics }) => {
                         boxShadow: usage > 10 ? `0 0 ${Math.min(usage / 10, 6)}px ${usage > 90 ? 'var(--nerv)' : 'var(--data-green)'}` : 'none',
                       }}
                     />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1 py-0.5 bg-black/90 border border-sf text-[8px] font-bold text-data-green tabular-nums whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1 py-0.5 bg-black/90 border border-sf text-[12px] font-bold text-data-green tabular-nums whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                       C{i}: {usage.toFixed(0)}%
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between text-[8px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
+              <div className="flex justify-between text-[12px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
                 <span>{coreCount} Logical Cores</span>
                 <span>Load: {metrics?.loadAvg?.[0]?.toFixed(2) || '0.00'} / {metrics?.loadAvg?.[1]?.toFixed(2) || '0.00'} / {metrics?.loadAvg?.[2]?.toFixed(2) || '0.00'}</span>
               </div>
@@ -120,7 +120,7 @@ const SystemMetricsPanel = ({ metrics }) => {
         <div className="space-y-3 pt-3 border-t border-sf">
           <div className="flex justify-between items-end">
             <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-nerv-dim uppercase tracking-widest">Main Memory Unit</span>
+              <span className="text-[14px] font-bold text-nerv-dim uppercase tracking-widest">Main Memory Unit</span>
               <span className="text-xs font-bold text-steel font-mincho">主記憶装置</span>
             </div>
             <span className="text-4xl font-black text-wire-cyan glow-cyan tabular-nums leading-none">{memPercent.toFixed(1)}%</span>
@@ -146,7 +146,7 @@ const SystemMetricsPanel = ({ metrics }) => {
               );
             })}
           </div>
-          <div className="flex justify-between text-[8px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
+          <div className="flex justify-between text-[12px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
             <span>Used: {formatBytes(metrics?.mem?.used)}</span>
             <span>Free: {formatBytes(metrics?.mem?.free)}</span>
             <span>Total: {formatBytes(metrics?.mem?.total)}</span>
@@ -156,7 +156,7 @@ const SystemMetricsPanel = ({ metrics }) => {
         {/* Uptime */}
         {metrics?.uptime && (
           <div className="pt-3 border-t border-sf flex justify-between items-center">
-            <span className="text-[9px] font-bold text-nerv uppercase tracking-widest">System Uptime</span>
+            <span className="text-[14px] font-bold text-nerv uppercase tracking-widest">System Uptime</span>
             <span className="text-sm font-bold text-steel font-sys tabular-nums">
               {Math.floor(metrics.uptime / 86400)}d {Math.floor((metrics.uptime % 86400) / 3600)}h {Math.floor((metrics.uptime % 3600) / 60)}m
             </span>
@@ -178,24 +178,24 @@ const MiniQueue = ({ queue, currentJob }) => {
       </div>
       <div className="panel-body p-0">
         {nextJobs.length === 0 ? (
-          <div className="p-8 text-center text-[10px] font-bold text-steel-dim uppercase italic tracking-widest">
+          <div className="p-8 text-center text-[15px] font-bold text-steel-dim uppercase italic tracking-widest">
             Queue Exhausted
           </div>
         ) : (
           <div className="divide-y divide-sf">
             {nextJobs.map((job, i) => (
               <div key={job.id || i} className="p-3 flex items-start gap-3 bg-void-panel/50 hover:bg-nerv/5 transition-colors group">
-                <div className="text-[9px] font-black text-nerv-dim group-hover:text-nerv mt-0.5">{i + 1}</div>
+                <div className="text-[14px] font-black text-nerv-dim group-hover:text-nerv mt-0.5">{i + 1}</div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[10px] font-bold text-steel truncate uppercase tracking-tight">{job.input_folder.split('/').pop()}</div>
-                  <div className="text-[8px] font-bold text-steel-dim uppercase mt-0.5">
+                  <div className="text-[15px] font-bold text-steel truncate uppercase tracking-tight">{job.input_folder.split('/').pop()}</div>
+                  <div className="text-[12px] font-bold text-steel-dim uppercase mt-0.5">
                     CRF {job.crf} | {job.encoder.split('/').pop()}
                   </div>
                 </div>
               </div>
             ))}
             {queue.length > 5 && (
-              <div className="p-2 text-center text-[8px] font-bold text-nerv-dim uppercase tracking-widest bg-void">
+              <div className="p-2 text-center text-[12px] font-bold text-nerv-dim uppercase tracking-widest bg-void">
                 + {queue.length - 5} more items
               </div>
             )}
@@ -368,7 +368,7 @@ const WaveformPanel = ({ status }) => {
         <div className="flex items-center gap-2">
           <Activity className="w-3.5 h-3.5 text-nerv" />
           <span>Audio Waveform Analysis</span>
-          <span className="text-steel font-mincho text-[9px] ml-1">音声波形解析</span>
+          <span className="text-steel font-mincho text-[14px] ml-1">音声波形解析</span>
         </div>
         {duration > 0 && <span className="tag">{formatDur(duration)}</span>}
       </div>
@@ -376,7 +376,7 @@ const WaveformPanel = ({ status }) => {
         <canvas ref={canvasRef} className="w-full h-full block" />
         {peaks.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[9px] font-bold text-steel-dim uppercase tracking-widest">Awaiting Signal</span>
+            <span className="text-[14px] font-bold text-steel-dim uppercase tracking-widest">Awaiting Signal</span>
           </div>
         )}
       </div>
@@ -395,43 +395,43 @@ const MediaInfoPanel = ({ status }) => {
         <div className="flex items-center gap-2">
           <FileVideo className="w-3.5 h-3.5 text-nerv" />
           <span>Media Intelligence</span>
-          <span className="text-steel font-mincho text-[9px] ml-1">媒体情報</span>
+          <span className="text-steel font-mincho text-[14px] ml-1">媒体情報</span>
         </div>
         {isEncoding && <span className="tag">Active</span>}
       </div>
       <div className="panel-body flex-1 min-h-0 overflow-auto">
         {(!isEncoding || !fileMeta) ? (
           <div className="h-full flex items-center justify-center">
-            <span className="text-[9px] font-bold text-steel-dim uppercase tracking-widest">No Active File</span>
+            <span className="text-[14px] font-bold text-steel-dim uppercase tracking-widest">No Active File</span>
           </div>
         ) : (
           <div className="space-y-3">
             {/* Video info */}
             <div className="space-y-1.5">
-              <h4 className="text-[8px] font-bold text-nerv uppercase tracking-widest">Video Stream</h4>
+              <h4 className="text-[12px] font-bold text-nerv uppercase tracking-widest">Video Stream</h4>
               <div className="grid grid-cols-2 gap-1.5">
                 {fileMeta.resolution && (
                   <div className="bg-void p-2 border border-sf">
-                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Resolution</span>
-                    <span className="text-[11px] font-bold text-steel">{fileMeta.resolution}</span>
+                    <span className="text-[11px] font-bold text-steel-dim uppercase block">Resolution</span>
+                    <span className="text-[17px] font-bold text-steel">{fileMeta.resolution}</span>
                   </div>
                 )}
                 {fileMeta.sourceCodec && (
                   <div className="bg-void p-2 border border-sf">
-                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Source Codec</span>
-                    <span className="text-[11px] font-bold text-steel">{fileMeta.sourceCodec.toUpperCase()}</span>
+                    <span className="text-[11px] font-bold text-steel-dim uppercase block">Source Codec</span>
+                    <span className="text-[17px] font-bold text-steel">{fileMeta.sourceCodec.toUpperCase()}</span>
                   </div>
                 )}
                 {encoder && (
                   <div className="bg-void p-2 border border-sf">
-                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Target Encoder</span>
-                    <span className="text-[11px] font-bold text-steel">{encoder.split('/').pop()}</span>
+                    <span className="text-[11px] font-bold text-steel-dim uppercase block">Target Encoder</span>
+                    <span className="text-[17px] font-bold text-steel">{encoder.split('/').pop()}</span>
                   </div>
                 )}
                 {fileMeta.sourceFps && (
                   <div className="bg-void p-2 border border-sf">
-                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Frame Rate</span>
-                    <span className="text-[11px] font-bold text-steel">{fileMeta.sourceFps} fps</span>
+                    <span className="text-[11px] font-bold text-steel-dim uppercase block">Frame Rate</span>
+                    <span className="text-[17px] font-bold text-steel">{fileMeta.sourceFps} fps</span>
                   </div>
                 )}
               </div>
@@ -440,23 +440,23 @@ const MediaInfoPanel = ({ status }) => {
             {/* Color metadata */}
             {fileMeta.color && (
               <div className="space-y-1.5">
-                <h4 className="text-[8px] font-bold text-nerv uppercase tracking-widest">Color Space</h4>
+                <h4 className="text-[12px] font-bold text-nerv uppercase tracking-widest">Color Space</h4>
                 <div className="grid grid-cols-2 gap-1.5">
                   <div className="bg-void p-2 border border-sf">
-                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Primaries</span>
-                    <span className="text-[11px] font-bold text-wire-cyan">{colorLabel('primaries', fileMeta.color.primaries)}</span>
+                    <span className="text-[11px] font-bold text-steel-dim uppercase block">Primaries</span>
+                    <span className="text-[17px] font-bold text-wire-cyan">{colorLabel('primaries', fileMeta.color.primaries)}</span>
                   </div>
                   <div className="bg-void p-2 border border-sf">
-                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Transfer</span>
-                    <span className="text-[11px] font-bold text-wire-cyan">{colorLabel('transfer', fileMeta.color.transfer)}</span>
+                    <span className="text-[11px] font-bold text-steel-dim uppercase block">Transfer</span>
+                    <span className="text-[17px] font-bold text-wire-cyan">{colorLabel('transfer', fileMeta.color.transfer)}</span>
                   </div>
                   <div className="bg-void p-2 border border-sf">
-                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Matrix</span>
-                    <span className="text-[11px] font-bold text-wire-cyan">{colorLabel('matrix', fileMeta.color.matrix)}</span>
+                    <span className="text-[11px] font-bold text-steel-dim uppercase block">Matrix</span>
+                    <span className="text-[17px] font-bold text-wire-cyan">{colorLabel('matrix', fileMeta.color.matrix)}</span>
                   </div>
                   <div className="bg-void p-2 border border-sf">
-                    <span className="text-[7px] font-bold text-steel-dim uppercase block">Range</span>
-                    <span className="text-[11px] font-bold text-wire-cyan">{colorLabel('range', fileMeta.color.range)}</span>
+                    <span className="text-[11px] font-bold text-steel-dim uppercase block">Range</span>
+                    <span className="text-[17px] font-bold text-wire-cyan">{colorLabel('range', fileMeta.color.range)}</span>
                   </div>
                 </div>
               </div>
@@ -465,15 +465,15 @@ const MediaInfoPanel = ({ status }) => {
             {/* Audio tracks */}
             {fileMeta.audioTracks && fileMeta.audioTracks.length > 0 && (
               <div className="space-y-1.5">
-                <h4 className="text-[8px] font-bold text-nerv uppercase tracking-widest">Audio Tracks</h4>
+                <h4 className="text-[12px] font-bold text-nerv uppercase tracking-widest">Audio Tracks</h4>
                 <div className="space-y-1">
                   {fileMeta.audioTracks.map((t, i) => (
                     <div key={i} className="bg-void p-2 border border-sf flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <span className="text-[10px] font-bold text-steel block truncate">{t.title}</span>
-                        <span className="text-[8px] font-bold text-steel-dim uppercase">{t.layout}</span>
+                        <span className="text-[15px] font-bold text-steel block truncate">{t.title}</span>
+                        <span className="text-[12px] font-bold text-steel-dim uppercase">{t.layout}</span>
                       </div>
-                      <span className={cn("text-[8px] font-bold uppercase px-1.5 py-0.5 border shrink-0",
+                      <span className={cn("text-[12px] font-bold uppercase px-1.5 py-0.5 border shrink-0",
                         t.mode === 'copy' ? 'text-wire-cyan border-wire-cyan/30 bg-wire-cyan/5' : 'text-data-green border-data-green/30 bg-data-green/5'
                       )}>
                         {t.mode === 'copy' ? 'Passthrough' : `Encode ${t.bitrate}`}
@@ -493,7 +493,7 @@ const MediaInfoPanel = ({ status }) => {
 const StatusCard = ({ label, value }) => {
   return (
     <div className="border border-sf p-4 bg-void-panel">
-      <p className="text-[8px] font-bold uppercase tracking-widest text-nerv mb-1.5">{label}</p>
+      <p className="text-[12px] font-bold uppercase tracking-widest text-nerv mb-1.5">{label}</p>
       <p className="text-sm font-bold truncate text-steel">{value}</p>
     </div>
   );
@@ -542,20 +542,20 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3 mb-1">
                 <h3 className="text-base font-bold truncate text-steel">{activeJob?.name || 'Encode Operation'}</h3>
-                <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-nerv bg-nerv/5">
+                <span className="text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-nerv bg-nerv/5">
                   {status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'}
                 </span>
-                <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-steel-dim">
+                <span className="text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-steel-dim">
                   {`${status?.queueLength || 0} Queued`}
                 </span>
               </div>
               {isEncoding && (
-                <p className="text-[10px] font-bold text-data-green">
+                <p className="text-[15px] font-bold text-data-green">
                   {status.fileIndex && status.totalFiles ? `File ${status.fileIndex} of ${status.totalFiles}` : 'Starting...'}
                   {status.phase === 'muxing' && ' — Muxing'}
                 </p>
               )}
-              {isPaused && <p className="text-[10px] font-bold text-nerv-dim">Job is waiting to resume</p>}
+              {isPaused && <p className="text-[15px] font-bold text-nerv-dim">Job is waiting to resume</p>}
             </div>
             <div className="flex items-center gap-3 ml-4">
               {isEncoding && <p className="text-3xl font-black tabular-nums text-data-green glow-green">{progress.toFixed(1)}%</p>}
@@ -599,7 +599,7 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="nerv-title text-nerv text-base">Queue Ready</h3>
-                  <p className="text-[10px] font-bold mt-1 text-steel-dim">{queue.length} job{queue.length !== 1 ? 's' : ''} waiting</p>
+                  <p className="text-[15px] font-bold mt-1 text-steel-dim">{queue.length} job{queue.length !== 1 ? 's' : ''} waiting</p>
                 </div>
                 <button onClick={resumeEncode} title="Start processing queue" className="flex items-center gap-2 px-4 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Start</button>
               </div>
@@ -627,11 +627,11 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
         <div className="panel-header">
           <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-nerv" /><span>Terminal Log</span></div>
           <div className="flex items-center gap-3">
-            {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[9px] font-bold uppercase text-wire-cyan hover:text-wire-cyan/80 transition-colors">Resume Scroll</button>}
-            <button onClick={() => setLogs([])} className="text-[9px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
+            {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[14px] font-bold uppercase text-wire-cyan hover:text-wire-cyan/80 transition-colors">Resume Scroll</button>}
+            <button onClick={() => setLogs([])} className="text-[14px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
           </div>
         </div>
-        <div ref={logRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[11px] leading-relaxed text-data-green-dim min-h-0">
+        <div ref={logRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[17px] leading-relaxed text-data-green-dim min-h-0">
           {logs.length === 0 && <p className="text-steel-dim/50 italic">Listening for output...</p>}
           {logs.map((log, i) => <div key={i} className="mb-1 border-l border-sf pl-3 py-0.5 hover:bg-white/[0.02] text-data-green-dim">{log}</div>)}
         </div>
@@ -649,7 +649,7 @@ const QueueSection = ({ queue }) => {
       <div className="flex items-center justify-between">
         <h3 className="nerv-title text-nerv text-sm">Pending Jobs ({queue.length})</h3>
         {queue.length > 0 && (
-          <button onClick={clearQueue} className="flex items-center gap-2 px-3 py-2 text-[10px] font-bold bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95 uppercase tracking-wider">
+          <button onClick={clearQueue} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95 uppercase tracking-wider">
             <Trash2 className="w-3.5 h-3.5" /> Clear Queue
           </button>
         )}
@@ -663,7 +663,7 @@ const QueueSection = ({ queue }) => {
         <div className="grid gap-2">{queue.map((batch, i) => (
           <div key={batch.id || i} className="border border-sf p-4 flex items-center gap-4 bg-void-panel">
             <div className="w-9 h-9 bg-nerv/10 flex items-center justify-center"><Folder className="w-4 h-4 text-nerv" /></div>
-            <div className="flex-1 min-w-0"><h4 className="font-bold text-sm truncate text-steel">{batch.input_folder}</h4><p className="text-[10px] font-bold uppercase mt-0.5 text-steel-dim">Encoder: {batch.encoder.split('/').pop()} | CRF {batch.crf} | Preset {batch.preset}</p></div>
+            <div className="flex-1 min-w-0"><h4 className="font-bold text-sm truncate text-steel">{batch.input_folder}</h4><p className="text-[15px] font-bold uppercase mt-0.5 text-steel-dim">Encoder: {batch.encoder.split('/').pop()} | CRF {batch.crf} | Preset {batch.preset}</p></div>
             {batch.id && <button onClick={() => removeJob(batch.id)} title="Remove from queue" className="p-1.5 text-steel-dim hover:text-alert-red transition-all"><X className="w-3.5 h-3.5" /></button>}
           </div>
         ))}</div>
@@ -693,9 +693,9 @@ const EncoderCard = ({ enc, buildEncoder, buildLogs }) => {
           {enc.isInstalled ? <CheckCircle2 className="w-5 h-5 text-data-green" /> : <AlertCircle className="w-5 h-5 text-nerv" />}
         </div>
         <h4 className="nerv-title text-nerv text-base mb-1">{enc.name}</h4>
-        <p className="text-[10px] font-bold mb-4 text-steel-dim uppercase tracking-wider">{enc.isInstalled ? 'Binary Ready' : 'Build Required'}</p>
+        <p className="text-[15px] font-bold mb-4 text-steel-dim uppercase tracking-wider">{enc.isInstalled ? 'Binary Ready' : 'Build Required'}</p>
         <div className="space-y-1 mb-4">
-          <label className="text-[9px] font-bold uppercase tracking-widest text-nerv">Source Branch</label>
+          <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Source Branch</label>
           <select value={branch} onChange={e => setBranch(e.target.value)} disabled={loadingBranches} className="w-full border border-sf bg-void p-2.5 text-xs font-bold text-steel font-sys">
             {loadingBranches ? <option>Loading...</option> : branchList.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
@@ -704,7 +704,7 @@ const EncoderCard = ({ enc, buildEncoder, buildLogs }) => {
           <RefreshCcw className="w-3.5 h-3.5" /> {enc.isInstalled ? 'REBUILD' : 'COMPILE NOW'}
         </button>
       </div>
-      {buildLogs[enc.name] && <div className="bg-void border-t border-sf h-44 p-4 overflow-auto font-sys text-[9px] text-data-green-dim">{buildLogs[enc.name].map((l,i) => <div key={i} className="mb-0.5">{l}</div>)}</div>}
+      {buildLogs[enc.name] && <div className="bg-void border-t border-sf h-44 p-4 overflow-auto font-sys text-[14px] text-data-green-dim">{buildLogs[enc.name].map((l,i) => <div key={i} className="mb-0.5">{l}</div>)}</div>}
     </div>
   );
 };
@@ -740,11 +740,11 @@ const FileBrowser = ({ currentPath, onNavigate, onSelect, onFileSelect, selected
       </div>
       <div className="flex-1 overflow-auto p-3 space-y-0.5">
         {currentPath !== '/' && (
-          <button onClick={() => onNavigate(currentPath.substring(0, currentPath.lastIndexOf('/')) || '/')} className="w-full flex items-center gap-3 px-3 py-3 font-bold text-[10px] uppercase tracking-widest mb-3 border border-sf hover:bg-white/[0.03] text-steel-dim"><CornerLeftUp className="w-4 h-4" /> Go Back</button>
+          <button onClick={() => onNavigate(currentPath.substring(0, currentPath.lastIndexOf('/')) || '/')} className="w-full flex items-center gap-3 px-3 py-3 font-bold text-[15px] uppercase tracking-widest mb-3 border border-sf hover:bg-white/[0.03] text-steel-dim"><CornerLeftUp className="w-4 h-4" /> Go Back</button>
         )}
         {favDirs.length > 0 && (
           <div className="mb-3">
-            <p className="text-[8px] font-bold uppercase tracking-widest px-3 mb-1.5 text-nerv-dim">Favorites</p>
+            <p className="text-[12px] font-bold uppercase tracking-widest px-3 mb-1.5 text-nerv-dim">Favorites</p>
             {favDirs.map(fav => (
               <div key={fav} onClick={() => { onNavigate(fav); if (onSelect) onSelect(fav); }} className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-xs font-bold group transition-all hover:bg-nerv/10 active:scale-[0.98] cursor-pointer text-steel">
                 <Star className="w-3.5 h-3.5 shrink-0 text-nerv group-hover:text-nerv-hot" fill="currentColor" />
@@ -772,7 +772,7 @@ const FileBrowser = ({ currentPath, onNavigate, onSelect, onFileSelect, selected
             const isSelected = selectedFile === item.path;
             return (
               <div key={item.path} onClick={canSelect ? () => onFileSelect(item.path) : undefined} className={cn("w-full flex items-center gap-3 px-3 py-2 text-xs", canSelect ? cn("cursor-pointer transition-all hover:bg-wire-cyan/10 active:scale-[0.98]", isSelected && "bg-wire-cyan/10 border-l-2 border-wire-cyan text-wire-cyan") : "text-steel-dim/50")}>
-                <Icon className={cn("w-3.5 h-3.5 shrink-0", canSelect && isSelected && "text-wire-cyan")} /> <span className="truncate flex-1">{item.name}</span> <span className="text-[9px] font-sys shrink-0 text-steel-dim">{sizeStr}</span>
+                <Icon className={cn("w-3.5 h-3.5 shrink-0", canSelect && isSelected && "text-wire-cyan")} /> <span className="truncate flex-1">{item.name}</span> <span className="text-[14px] font-sys shrink-0 text-steel-dim">{sizeStr}</span>
               </div>
             );
           })}
@@ -810,15 +810,15 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
           </div>
           <form onSubmit={handleSubmit} className="w-1/2 p-8 space-y-6 bg-void-panel">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-nerv">Encoder Choice</label><select value={formData.encoder} onChange={e=>setFormData({...formData, encoder:e.target.value})} className={inputCls}>{encoders.map(e=><option key={e.path} value={e.path}>{e.name}</option>)}</select></div>
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-nerv">CRF Level</label><input type="number" value={formData.crf} onChange={e=>setFormData({...formData, crf:e.target.value})} className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Encoder Choice</label><select value={formData.encoder} onChange={e=>setFormData({...formData, encoder:e.target.value})} className={inputCls}>{encoders.map(e=><option key={e.path} value={e.path}>{e.name}</option>)}</select></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">CRF Level</label><input type="number" value={formData.crf} onChange={e=>setFormData({...formData, crf:e.target.value})} className={inputCls} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-nerv">Preset (0-13)</label><input type="number" value={formData.preset} onChange={e=>setFormData({...formData, preset:e.target.value})} className={inputCls} /></div>
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-nerv">Tune (0-4)</label><input type="number" value={formData.tune} onChange={e=>setFormData({...formData, tune:e.target.value})} className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Preset (0-13)</label><input type="number" value={formData.preset} onChange={e=>setFormData({...formData, preset:e.target.value})} className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Tune (0-4)</label><input type="number" value={formData.tune} onChange={e=>setFormData({...formData, tune:e.target.value})} className={inputCls} /></div>
             </div>
-            <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-nerv">Output Subfolder</label><input type="text" value={formData.subfolder} onChange={e=>setFormData({...formData, subfolder:e.target.value})} placeholder="e.g. encodes" className={inputCls} /></div>
-            <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-nerv">Extra Encoder Flags</label><input type="text" value={formData.custom_flags} onChange={e=>setFormData({...formData, custom_flags:e.target.value})} placeholder="e.g. --lineart-psy-bias 3" className={inputCls} /></div>
+            <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Output Subfolder</label><input type="text" value={formData.subfolder} onChange={e=>setFormData({...formData, subfolder:e.target.value})} placeholder="e.g. encodes" className={inputCls} /></div>
+            <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Extra Encoder Flags</label><input type="text" value={formData.custom_flags} onChange={e=>setFormData({...formData, custom_flags:e.target.value})} placeholder="e.g. --lineart-psy-bias 3" className={inputCls} /></div>
             <div className="space-y-2">
               <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.auto_crop} onChange={e=>setFormData({...formData, auto_crop:e.target.checked})} className="w-4 h-4 accent-[#FF9830]" /><span className="text-xs font-bold text-steel">Auto-Crop Black Bars</span></label>
               <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.rename_audio} onChange={e=>setFormData({...formData, rename_audio:e.target.checked})} className="w-4 h-4 accent-[#FF9830]" /><span className="text-xs font-bold text-steel">Rename Audio Tracks</span></label>
@@ -865,12 +865,12 @@ const ToolCard = ({ tool, onConfigure }) => {
       <div className="flex items-start justify-between mb-2">
         <div className="w-8 h-8 bg-nerv/10 flex items-center justify-center"><Wrench className="w-4 h-4 text-nerv" /></div>
         <div className="flex flex-col items-end gap-1">
-          <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5", catColor)}>{tool.category}</span>
-          {modeBadge && <span className={cn("text-[9px] font-bold uppercase px-2 py-0.5", modeBadge.color)}>{modeBadge.label}</span>}
+          <span className={cn("text-[14px] font-bold uppercase px-2 py-0.5", catColor)}>{tool.category}</span>
+          {modeBadge && <span className={cn("text-[14px] font-bold uppercase px-2 py-0.5", modeBadge.color)}>{modeBadge.label}</span>}
         </div>
       </div>
       <h4 className="text-xs font-bold mb-1 text-steel">{tool.name}</h4>
-      <p className="text-[10px] flex-1 text-steel-dim">{tool.description}</p>
+      <p className="text-[15px] flex-1 text-steel-dim">{tool.description}</p>
     </div>
   );
 };
@@ -970,7 +970,7 @@ const ToolRunModal = ({ tool, onClose, setToolLogs, appSettings, favorites, togg
         <div className="px-6 py-4 border-b border-sf flex justify-between items-center bg-void">
           <div>
             <h3 className="nerv-title text-nerv text-lg">{tool.name.toUpperCase()}</h3>
-            <p className="text-[10px] mt-0.5 text-steel-dim">{tool.description}</p>
+            <p className="text-[15px] mt-0.5 text-steel-dim">{tool.description}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-steel-dim hover:text-alert-red transition-all"><X className="w-4 h-4" /></button>
         </div>
@@ -989,7 +989,7 @@ const ToolRunModal = ({ tool, onClose, setToolLogs, appSettings, favorites, togg
               header={browserVars.length > 1 && (
                 <div className="px-4 py-2 border-b border-sf flex gap-1.5 flex-wrap">
                   {browserVars.map(v => (
-                    <button key={v.name} onClick={() => setActivePathVar(v.name)} className={cn("px-2.5 py-1 text-[9px] font-bold uppercase transition-all", activePathVar === v.name ? "bg-nerv text-black" : "bg-void-panel border border-sf text-steel-dim hover:text-nerv")}>{v.label}</button>
+                    <button key={v.name} onClick={() => setActivePathVar(v.name)} className={cn("px-2.5 py-1 text-[14px] font-bold uppercase transition-all", activePathVar === v.name ? "bg-nerv text-black" : "bg-void-panel border border-sf text-steel-dim hover:text-nerv")}>{v.label}</button>
                   ))}
                 </div>
               )}
@@ -998,13 +998,13 @@ const ToolRunModal = ({ tool, onClose, setToolLogs, appSettings, favorites, togg
           <div className="w-1/2 p-8 space-y-5 overflow-auto bg-void-panel">
             {browserVars.map(v => (
               <div key={v.name} className="space-y-1.5">
-                <label className="text-[9px] font-bold uppercase tracking-widest text-nerv">{v.label}</label>
+                <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">{v.label}</label>
                 <input type="text" value={envValues[v.name] || ''} onChange={e => setEnvValues({...envValues, [v.name]: e.target.value})} placeholder={v.default || (v.type === 'file' ? 'Select a file from browser...' : 'Select from browser...')} className={inputCls} />
               </div>
             ))}
             {nonPathVars.filter(v => v.name !== 'DRY_RUN').map(v => (
               <div key={v.name} className="space-y-1.5">
-                <label className="text-[9px] font-bold uppercase tracking-widest text-nerv">{v.label}</label>
+                <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">{v.label}</label>
                 {tool.id === 'set_default_audio' && v.name === 'AUDIO_CHOICE' ? (
                   probingAudio ? (
                     <div className="px-3 py-2.5 text-xs font-bold border border-sf bg-void text-steel-dim">Scanning audio tracks...</div>
@@ -1030,17 +1030,17 @@ const ToolRunModal = ({ tool, onClose, setToolLogs, appSettings, favorites, togg
             ))}
             {tool.id === 'rename_subtitles' && (
               <div className="space-y-3">
-                <button onClick={scanTracks} className="flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase border border-sf bg-void text-steel hover:text-nerv hover:border-nerv-dim/30 transition-all"><Search className="w-3 h-3" /> Scan Tracks</button>
+                <button onClick={scanTracks} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase border border-sf bg-void text-steel hover:text-nerv hover:border-nerv-dim/30 transition-all"><Search className="w-3 h-3" /> Scan Tracks</button>
                 {subTrackNames.length > 0 && subTrackNames.map((name, i) => (
                   <div key={i} className="space-y-1">
-                    <label className="text-[9px] font-bold uppercase tracking-widest text-nerv">Subtitle Track {i + 1}</label>
+                    <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Subtitle Track {i + 1}</label>
                     <input type="text" value={name} onChange={e => { const n = [...subTrackNames]; n[i] = e.target.value; setSubTrackNames(n); }} className={inputCls} />
                   </div>
                 ))}
               </div>
             )}
             <div className="flex items-center gap-3 pt-1">
-              <button onClick={() => setEnvValues({...envValues, DRY_RUN: envValues.DRY_RUN === '1' ? '0' : '1'})} className={cn("flex items-center gap-2 px-3 py-2.5 text-[10px] font-bold uppercase border transition-all", envValues.DRY_RUN === '1' ? "border-nerv/30 bg-nerv/10 text-nerv" : "border-sf bg-void text-steel-dim")}>
+              <button onClick={() => setEnvValues({...envValues, DRY_RUN: envValues.DRY_RUN === '1' ? '0' : '1'})} className={cn("flex items-center gap-2 px-3 py-2.5 text-[15px] font-bold uppercase border transition-all", envValues.DRY_RUN === '1' ? "border-nerv/30 bg-nerv/10 text-nerv" : "border-sf bg-void text-steel-dim")}>
                 {envValues.DRY_RUN === '1' ? 'DRY RUN ON' : 'DRY RUN OFF'}
               </button>
             </div>
@@ -1080,7 +1080,7 @@ const ToolsSection = ({ toolLogs, setToolLogs, toolStatus, toolLogRef, appSettin
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
         {TOOL_CATEGORIES.map(cat => (
-          <button key={cat.id} onClick={() => setCategory(cat.id)} className={cn("px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all", category === cat.id ? "bg-nerv text-black" : "bg-void-panel border border-sf text-steel-dim hover:text-nerv hover:border-nerv-dim/30")}>{cat.label}</button>
+          <button key={cat.id} onClick={() => setCategory(cat.id)} className={cn("px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all", category === cat.id ? "bg-nerv text-black" : "bg-void-panel border border-sf text-steel-dim hover:text-nerv hover:border-nerv-dim/30")}>{cat.label}</button>
         ))}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -1093,12 +1093,12 @@ const ToolsSection = ({ toolLogs, setToolLogs, toolStatus, toolLogRef, appSettin
           <div className="panel-header">
             <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5" /><span>Tool Output</span></div>
             <div className="flex items-center gap-3">
-              {toolStatus?.running && <button onClick={stopTool} className="flex items-center gap-1.5 text-[9px] font-bold uppercase text-alert-red hover:text-alert-red/80 transition-colors"><StopCircle className="w-3 h-3" /> Stop</button>}
-              {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[9px] font-bold uppercase text-wire-cyan transition-colors">Resume Scroll</button>}
-              <button onClick={() => setToolLogs([])} className="text-[9px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
+              {toolStatus?.running && <button onClick={stopTool} className="flex items-center gap-1.5 text-[14px] font-bold uppercase text-alert-red hover:text-alert-red/80 transition-colors"><StopCircle className="w-3 h-3" /> Stop</button>}
+              {!autoScroll && <button onClick={() => setAutoScroll(true)} className="text-[14px] font-bold uppercase text-wire-cyan transition-colors">Resume Scroll</button>}
+              <button onClick={() => setToolLogs([])} className="text-[14px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
             </div>
           </div>
-          <div ref={toolLogRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[11px] leading-relaxed whitespace-pre-wrap text-data-green-dim">
+          <div ref={toolLogRef} onScroll={handleScroll} className="flex-1 p-4 overflow-auto font-sys text-[17px] leading-relaxed whitespace-pre-wrap text-data-green-dim">
             {toolLogs.length === 0 && <p className="text-steel-dim/50 italic">Waiting for output...</p>}
             {toolLogs.map((log, i) => <div key={i} className={cn("mb-0.5", log.includes('[Process exited') ? (log.includes('code 0') ? 'text-data-green' : 'text-alert-red') : '')}>{log}</div>)}
           </div>
@@ -1294,7 +1294,7 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
         <div className="border-2 border-dashed border-sf py-16 flex flex-col items-center justify-center bg-void text-steel-dim">
           <Image className="w-12 h-12 mb-3 opacity-50" />
           <p className="font-bold uppercase tracking-widest text-xs">{loading ? 'Loading...' : allSessions.length === 0 ? 'No Test Encodes Yet' : 'Select a Session'}</p>
-          {allSessions.length === 0 && !loading && <p className="text-[10px] mt-1.5 text-steel-dim/50">Run a test encode to compare variants</p>}
+          {allSessions.length === 0 && !loading && <p className="text-[15px] mt-1.5 text-steel-dim/50">Run a test encode to compare variants</p>}
         </div>
       )}
 
@@ -1305,13 +1305,13 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
           <div className="px-4 py-2 border-b border-sf flex items-center justify-between gap-3 bg-void">
             <div className="flex items-center gap-1 flex-wrap flex-1">
               {variants.map((v, i) => (
-                <button key={v.label} onClick={() => setActiveVariant(i)} className={cn("px-3 py-1.5 text-[10px] font-bold transition-all uppercase tracking-wider", activeVariant === i ? "bg-wire-cyan text-black" : "text-steel-dim hover:text-wire-cyan")}>
-                  <span className={cn("inline-block w-4 h-4 text-center mr-1 text-[9px] leading-4 font-bold", activeVariant === i ? "bg-black/20" : "bg-[#1a1a18]")}>{i + 1}</span>
+                <button key={v.label} onClick={() => setActiveVariant(i)} className={cn("px-3 py-1.5 text-[15px] font-bold transition-all uppercase tracking-wider", activeVariant === i ? "bg-wire-cyan text-black" : "text-steel-dim hover:text-wire-cyan")}>
+                  <span className={cn("inline-block w-4 h-4 text-center mr-1 text-[14px] leading-4 font-bold", activeVariant === i ? "bg-black/20" : "bg-[#1a1a18]")}>{i + 1}</span>
                   {v.label}
                 </button>
               ))}
             </div>
-            <button onClick={() => setViewMode(m => m === 'tab' ? 'side-by-side' : 'tab')} title={`Switch to ${viewMode === 'tab' ? 'side-by-side' : 'tab'} view (S)`} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold transition-all uppercase tracking-wider", viewMode === 'side-by-side' ? "bg-wire-cyan text-black" : "text-steel-dim hover:text-wire-cyan")}>
+            <button onClick={() => setViewMode(m => m === 'tab' ? 'side-by-side' : 'tab')} title={`Switch to ${viewMode === 'tab' ? 'side-by-side' : 'tab'} view (S)`} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 text-[15px] font-bold transition-all uppercase tracking-wider", viewMode === 'side-by-side' ? "bg-wire-cyan text-black" : "text-steel-dim hover:text-wire-cyan")}>
               <Columns className="w-3 h-3" />
               {viewMode === 'tab' ? 'Side by Side' : 'Tab View'}
             </button>
@@ -1340,7 +1340,7 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
                       draggable={false}
                     />
                     {zoomLevel > 1 && showZoomIndicator && (
-                      <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 text-data-green text-[10px] font-bold font-sys">
+                      <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 text-data-green text-[15px] font-bold font-sys">
                         {zoomLevel}x
                       </div>
                     )}
@@ -1353,7 +1353,7 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
               <div className="w-full flex gap-2 overflow-x-auto">
                 {variants.map((v, i) => (
                   <div key={v.label} className="flex-1 min-w-[200px] flex flex-col items-center gap-1.5">
-                    <span className={cn("text-[10px] font-bold px-2.5 py-0.5 uppercase tracking-wider", activeVariant === i ? "bg-wire-cyan text-black" : "bg-[#1a1a18] text-steel-dim")}>{v.label}</span>
+                    <span className={cn("text-[15px] font-bold px-2.5 py-0.5 uppercase tracking-wider", activeVariant === i ? "bg-wire-cyan text-black" : "bg-[#1a1a18] text-steel-dim")}>{v.label}</span>
                     {v.screenshots[currentPosition] ? (
                       <div
                         className="relative overflow-hidden w-full select-none"
@@ -1374,14 +1374,14 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
                           draggable={false}
                         />
                         {i === 0 && zoomLevel > 1 && showZoomIndicator && (
-                          <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 text-data-green text-[10px] font-bold font-sys">
+                          <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 text-data-green text-[15px] font-bold font-sys">
                             {zoomLevel}x
                           </div>
                         )}
                       </div>
                     ) : (
                       <div className="w-full h-48 flex items-center justify-center bg-void">
-                        <p className="text-[10px] text-steel-dim/50 italic">No screenshot</p>
+                        <p className="text-[15px] text-steel-dim/50 italic">No screenshot</p>
                       </div>
                     )}
                   </div>
@@ -1401,7 +1401,7 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
                   <button key={i} onClick={() => setCurrentPosition(i)} className={cn("w-2 h-2 transition-all", currentPosition === i ? "bg-wire-cyan scale-125" : "bg-[#1a1a18] hover:bg-steel-dim")} />
                 ))}
               </div>
-              <span className="text-[10px] font-bold tabular-nums min-w-[50px] text-center text-steel-dim font-sys">{currentPosition + 1} / {maxScreenshots}</span>
+              <span className="text-[15px] font-bold tabular-nums min-w-[50px] text-center text-steel-dim font-sys">{currentPosition + 1} / {maxScreenshots}</span>
               <button onClick={() => setCurrentPosition(p => Math.min(maxScreenshots - 1, p + 1))} disabled={currentPosition >= maxScreenshots - 1} className="p-1.5 transition-all disabled:opacity-30 text-steel-dim hover:text-nerv">
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -1412,7 +1412,7 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
 
       {/* Keyboard shortcuts */}
       {selectedSession && sessionData && (
-        <div className="flex items-center justify-center gap-5 text-[9px] font-bold uppercase tracking-widest text-steel-dim/50">
+        <div className="flex items-center justify-center gap-5 text-[14px] font-bold uppercase tracking-widest text-steel-dim/50">
           <span>← → Navigate</span>
           <span>1-9 Switch Variant</span>
           <span>S Toggle View</span>
@@ -1436,7 +1436,7 @@ const TestEncodeProgress = ({ status }) => {
             <FlaskConical className="w-4 h-4 text-wire-cyan" />
             <h3 className="text-base font-bold text-steel">Test Encode</h3>
           </div>
-          <p className="text-[10px] font-bold mt-0.5 text-wire-cyan">
+          <p className="text-[15px] font-bold mt-0.5 text-wire-cyan">
             {status.phaseLabel || phaseLabels[status.phase] || status.phase}
             {status.variantIndex > 0 && ` (${status.variantIndex} of ${status.totalVariants})`}
           </p>
@@ -1471,7 +1471,7 @@ const TestEncodeHelp = () => {
     <div className="relative">
       <button onClick={() => setOpen(!open)} className="p-1 text-steel-dim hover:text-nerv transition-all"><HelpCircle className="w-4 h-4" /></button>
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 p-3 border border-sf bg-void-panel shadow-2xl z-50 w-72 text-[10px] leading-relaxed text-steel-dim">
+        <div className="absolute top-full left-0 mt-1.5 p-3 border border-sf bg-void-panel shadow-2xl z-50 w-72 text-[15px] leading-relaxed text-steel-dim">
           Compare encoder settings side-by-side. Extracts a short sample from your source, encodes it once per variant with different flags, then generates screenshots for easy visual comparison.
         </div>
       )}
@@ -1543,27 +1543,27 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
           </div>
           <div className="w-1/2 p-8 space-y-5 overflow-auto bg-void-panel">
             <div className="space-y-1.5">
-              <label className="text-[9px] font-bold uppercase tracking-widest text-wire-cyan">Selected File</label>
+              <label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Selected File</label>
               <input type="text" value={selectedFile} readOnly placeholder="Select a video file from browser..." className={cn(inputCls, "opacity-70")} />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-wire-cyan">Encoder</label><select value={formData.encoder} onChange={e => setFormData({...formData, encoder: e.target.value})} className={inputCls}>{encoders.map(e => <option key={e.path} value={e.path}>{e.name}</option>)}</select></div>
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-wire-cyan">CRF</label><input type="number" value={formData.crf} onChange={e => setFormData({...formData, crf: e.target.value})} className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Encoder</label><select value={formData.encoder} onChange={e => setFormData({...formData, encoder: e.target.value})} className={inputCls}>{encoders.map(e => <option key={e.path} value={e.path}>{e.name}</option>)}</select></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">CRF</label><input type="number" value={formData.crf} onChange={e => setFormData({...formData, crf: e.target.value})} className={inputCls} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-wire-cyan">Preset</label><input type="number" value={formData.preset} onChange={e => setFormData({...formData, preset: e.target.value})} className={inputCls} /></div>
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-wire-cyan">Tune</label><input type="number" value={formData.tune} onChange={e => setFormData({...formData, tune: e.target.value})} className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Preset</label><input type="number" value={formData.preset} onChange={e => setFormData({...formData, preset: e.target.value})} className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Tune</label><input type="number" value={formData.tune} onChange={e => setFormData({...formData, tune: e.target.value})} className={inputCls} /></div>
             </div>
             <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-wire-cyan">Sample Duration (s)</label><input type="number" value={formData.duration} onChange={e => setFormData({...formData, duration: e.target.value})} className={inputCls} /></div>
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-wire-cyan">Start Time (s)</label><input type="number" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} placeholder="Auto" className={inputCls} /></div>
-              <div className="space-y-1.5"><label className="text-[9px] font-bold uppercase tracking-widest text-wire-cyan">Screenshots</label><input type="number" value={formData.screenshotCount} onChange={e => setFormData({...formData, screenshotCount: e.target.value})} className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Sample Duration (s)</label><input type="number" value={formData.duration} onChange={e => setFormData({...formData, duration: e.target.value})} className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Start Time (s)</label><input type="number" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} placeholder="Auto" className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Screenshots</label><input type="number" value={formData.screenshotCount} onChange={e => setFormData({...formData, screenshotCount: e.target.value})} className={inputCls} /></div>
             </div>
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-[9px] font-bold uppercase tracking-widest text-wire-cyan">Variants</label>
-                <button onClick={addVariant} className="flex items-center gap-1.5 px-2.5 py-1 text-[9px] font-bold uppercase bg-void border border-sf text-steel hover:text-wire-cyan hover:border-wire-cyan-dim/30 transition-all"><Plus className="w-2.5 h-2.5" /> Add</button>
+                <label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Variants</label>
+                <button onClick={addVariant} className="flex items-center gap-1.5 px-2.5 py-1 text-[14px] font-bold uppercase bg-void border border-sf text-steel hover:text-wire-cyan hover:border-wire-cyan-dim/30 transition-all"><Plus className="w-2.5 h-2.5" /> Add</button>
               </div>
               {variants.map((v, i) => (
                 <div key={i} className="border border-sf p-3 space-y-2 bg-void">
@@ -1666,7 +1666,7 @@ const App = () => {
             <div className="w-7 h-7 bg-nerv flex items-center justify-center font-title font-black text-black text-sm">P</div>
             <h1 className="nerv-title text-nerv text-sm" style={{ lineHeight: 1 }}>PRISM</h1>
           </div>
-          <span className="text-[9px] px-1.5 py-0.5 font-sys font-bold text-nerv-dim border border-nerv-dim/30">
+          <span className="text-[14px] px-1.5 py-0.5 font-sys font-bold text-nerv-dim border border-nerv-dim/30">
             {versionInfo.channel === 'nightly' ? 'DEV' : (versionInfo.version ? `V${versionInfo.version}` : '')}
           </span>
         </div>
@@ -1693,11 +1693,11 @@ const App = () => {
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden bg-void">
         <header className="h-12 shrink-0 border-b border-sf flex items-center justify-between px-6 bg-void z-10">
-          <h2 className="nerv-title text-nerv text-[11px] uppercase tracking-[0.2em]">{activeTab}</h2>
+          <h2 className="nerv-title text-nerv text-[17px] uppercase tracking-[0.2em]">{activeTab}</h2>
           <div className="flex items-center gap-3">
-            {testRunning && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-wire-cyan animate-pulse tracking-wider"><FlaskConical className="w-3 h-3" /> TEST ENCODE</div>}
-            {toolRunning && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-nerv animate-pulse tracking-wider"><Wrench className="w-3 h-3" /> {toolStatus.toolName?.toUpperCase()}</div>}
-            {statusActive && <div className="flex items-center gap-2 text-[10px] text-black px-3 py-1 font-bold bg-data-green animate-pulse tracking-wider">{status.status?.toUpperCase()}</div>}
+            {testRunning && <div className="flex items-center gap-2 text-[15px] text-black px-3 py-1 font-bold bg-wire-cyan animate-pulse tracking-wider"><FlaskConical className="w-3 h-3" /> TEST ENCODE</div>}
+            {toolRunning && <div className="flex items-center gap-2 text-[15px] text-black px-3 py-1 font-bold bg-nerv animate-pulse tracking-wider"><Wrench className="w-3 h-3" /> {toolStatus.toolName?.toUpperCase()}</div>}
+            {statusActive && <div className="flex items-center gap-2 text-[15px] text-black px-3 py-1 font-bold bg-data-green animate-pulse tracking-wider">{status.status?.toUpperCase()}</div>}
           </div>
         </header>
         {activeTab === 'dashboard' && <Dashboard status={status} queue={queue} logs={logs} logRef={logRef} setLogs={setLogs} autoScroll={autoScroll} setAutoScroll={setAutoScroll} systemMetrics={systemMetrics} />}
