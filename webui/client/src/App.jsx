@@ -90,29 +90,30 @@ const SystemMetricsPanel = ({ metrics }) => {
             <span className="text-4xl font-black text-data-green glow-green tabular-nums leading-none">{cpuPercent.toFixed(1)}%</span>
           </div>
 
-          {/* Per-core vertical bar visualizer */}
+          {/* Per-core horizontal bar grid */}
           {perCore.length > 0 && (
             <div className="space-y-2">
-              <div className="flex items-end gap-px h-32 bg-void border border-sf p-1.5">
-                {perCore.map((usage, i) => (
-                  <div key={i} className="flex-1 flex flex-col justify-end h-full relative group">
-                    <div
-                      className="w-full transition-all duration-700 ease-out"
-                      style={{
-                        height: `${Math.max(usage, 1)}%`,
-                        background: usage > 90
-                          ? 'var(--nerv)'
-                          : usage > 60
-                            ? 'linear-gradient(to top, var(--data-green), var(--nerv))'
-                            : 'var(--data-green)',
-                        boxShadow: usage > 10 ? `0 0 ${Math.min(usage / 10, 6)}px ${usage > 90 ? 'var(--nerv)' : 'var(--data-green)'}` : 'none',
-                      }}
-                    />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1 py-0.5 bg-black/90 border border-sf text-[12px] font-bold text-data-green tabular-nums whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                      C{i}: {usage.toFixed(0)}%
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {perCore.map((usage, i) => {
+                  const barColor = usage > 90 ? 'var(--alert-red)' : usage > 70 ? 'var(--nerv-orange)' : 'var(--data-green)';
+                  const glowColor = usage > 90 ? 'var(--alert-red)' : usage > 70 ? 'var(--nerv-orange)' : 'var(--data-green)';
+                  return (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-steel-dim tabular-nums w-7 shrink-0">C{i}</span>
+                      <div className="flex-1 h-3 bg-void border border-sf overflow-hidden">
+                        <div
+                          className="h-full transition-all duration-700 ease-out"
+                          style={{
+                            width: `${Math.max(usage, 1)}%`,
+                            background: barColor,
+                            boxShadow: usage > 20 ? `0 0 ${Math.min(usage / 15, 4)}px ${glowColor}` : 'none',
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-bold tabular-nums w-8 text-right shrink-0" style={{ color: barColor }}>{usage.toFixed(0)}%</span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="flex justify-between text-[12px] font-bold text-steel-dim uppercase tracking-tight tabular-nums">
                 <span>{coreCount} Logical Cores</span>
@@ -392,7 +393,7 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
   const isIdleWithQueue = status?.status === 'idle' && queue.length > 0;
   const gridStyle = isEncoding || isPaused ? {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)',
     gridTemplateRows: '1fr 1fr',
     gridTemplateAreas: `"encode stats sidebar" "terminal mediainfo sidebar"`,
     flex: '1 1 0%',
@@ -401,7 +402,7 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
     padding: '16px',
   } : {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
+    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)',
     gridTemplateRows: '1fr 1fr',
     gridTemplateAreas: `"status stats sidebar" "terminal mediainfo sidebar"`,
     flex: '1 1 0%',
