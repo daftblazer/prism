@@ -33,13 +33,113 @@ const TOOL_REGISTRY_FILE = path.join(__dirname, '../shared/toolRegistry.json');
 
 let queue = [];
 let currentJob = null;
-let currentChild = null;
 let isBuilding = false;
 let paused = false;
 let currentToolChild = null;
 let toolRunning = false;
 let testEncodeRunning = false;
 let currentTestEncodeChild = null;
+
+const tasksetAvailable = (() => {
+  try { require('child_process').execSync('which taskset', { stdio: 'ignore' }); return true; }
+  catch { return false; }
+})();
+
+function computeThreadAllocations(totalThreads, instanceCount, reservedCores, threadsPerCCD) {
+  const halfThreads = totalThreads / 2;
+
+  if (threadsPerCCD > 0) {
+    // CCD-aware allocation (AMD Zen: core N → threads N and N + halfThreads)
+    const coresPerCCD = threadsPerCCD / 2;
+    const numCCDs = Math.ceil(halfThreads / coresPerCCD);
+
+    // Build list of all cores with their thread pairs
+    const allCores = [];
+    for (let c = 0; c < halfThreads; c++) {
+      allCores.push({ core: c, threads: [c, c + halfThreads], ccd: Math.floor(c / coresPerCCD) });
+    }
+
+    // Reserve cores from the start
+    const availableCores = allCores.slice(reservedCores);
+
+    // Group available cores by CCD
+    const ccdGroups = {};
+    for (const core of availableCores) {
+      if (!ccdGroups[core.ccd]) ccdGroups[core.ccd] = [];
+      ccdGroups[core.ccd].push(core);
+    }
+    const ccdKeys = Object.keys(ccdGroups).map(Number).sort((a, b) => a - b);
+
+    // Assign instances to CCDs
+    const allocations = [];
+    if (instanceCount <= ccdKeys.length) {
+      // One instance per CCD — distribute cores evenly across selected CCDs
+      const selectedCCDs = ccdKeys.slice(0, instanceCount);
+      for (const ccdIdx of selectedCCDs) {
+        const cores = ccdGroups[ccdIdx];
+        const threads = cores.flatMap(c => c.threads).sort((a, b) => a - b);
+        allocations.push({ cpuList: formatCpuList(threads), threadCount: threads.length });
+      }
+    } else {
+      // More instances than CCDs — split cores within CCDs
+      // Distribute instances across CCDs proportionally to available cores
+      const totalAvailCores = availableCores.length;
+      let instanceIdx = 0;
+      for (const ccdIdx of ccdKeys) {
+        const cores = ccdGroups[ccdIdx];
+        const instancesForCCD = Math.max(1, Math.round((cores.length / totalAvailCores) * instanceCount));
+        const actualInstances = Math.min(instancesForCCD, instanceCount - instanceIdx);
+        const base = Math.floor(cores.length / actualInstances);
+        const remainder = cores.length % actualInstances;
+        let offset = 0;
+        for (let i = 0; i < actualInstances && instanceIdx < instanceCount; i++) {
+          const count = base + (i < remainder ? 1 : 0);
+          const sliceCores = cores.slice(offset, offset + count);
+          const threads = sliceCores.flatMap(c => c.threads).sort((a, b) => a - b);
+          if (threads.length > 0) allocations.push({ cpuList: formatCpuList(threads), threadCount: threads.length });
+          offset += count;
+          instanceIdx++;
+        }
+      }
+    }
+    return allocations;
+  }
+
+  // Simple contiguous split (no CCD awareness)
+  // Reserve cores from the start (both thread and hyperthread)
+  const reservedThreads = [];
+  for (let c = 0; c < reservedCores && c < halfThreads; c++) {
+    reservedThreads.push(c, c + halfThreads);
+  }
+  const available = [];
+  for (let t = 0; t < totalThreads; t++) {
+    if (!reservedThreads.includes(t)) available.push(t);
+  }
+  const base = Math.floor(available.length / instanceCount);
+  const remainder = available.length % instanceCount;
+  const allocations = [];
+  let offset = 0;
+  for (let i = 0; i < instanceCount; i++) {
+    const count = base + (i < remainder ? 1 : 0);
+    const threads = available.slice(offset, offset + count);
+    if (threads.length > 0) allocations.push({ cpuList: formatCpuList(threads), threadCount: threads.length });
+    offset += count;
+  }
+  return allocations;
+}
+
+function formatCpuList(threads) {
+  if (threads.length === 0) return '';
+  threads.sort((a, b) => a - b);
+  const ranges = [];
+  let start = threads[0], end = threads[0];
+  for (let i = 1; i < threads.length; i++) {
+    if (threads[i] === end + 1) { end = threads[i]; }
+    else { ranges.push(start === end ? `${start}` : `${start}-${end}`); start = end = threads[i]; }
+  }
+  ranges.push(start === end ? `${start}` : `${start}-${end}`);
+  return ranges.join(',');
+}
 
 function getCurrentStatus() {
   const s = isBuilding ? 'building' : (worker.processing ? 'encoding' : (paused ? 'paused' : 'idle'));
@@ -232,32 +332,42 @@ function emitFormattedLog(msg, type = 'info') {
 }
 
 class Worker {
-  constructor() { this.processing = false; this.stopping = false; }
-  async start() { if (this.processing) return; this.stopping = false; this.processing = true; this.processNext(); }
-  stop() { 
-    this.stopping = true; 
-    if (currentChild) { 
-      try { process.kill(-currentChild.pid, 'SIGTERM'); } catch(e) { try { currentChild.kill('SIGTERM'); } catch(e2) {} } 
-      currentChild = null; 
-    } 
+  constructor() {
+    this.processing = false;
+    this.stopping = false;
+    this.activeInstances = new Map(); // slotIndex -> { child, file, fileIdx, progress, stats }
+    this.completedCount = 0;
+    this.totalFiles = 0;
   }
-  
+
+  async start() { if (this.processing) return; this.stopping = false; this.processing = true; this.processNext(); }
+
+  stop() {
+    this.stopping = true;
+    for (const [, inst] of this.activeInstances) {
+      if (inst.child) {
+        try { process.kill(-inst.child.pid, 'SIGTERM'); } catch(e) { try { inst.child.kill('SIGTERM'); } catch(e2) {} }
+      }
+    }
+    this.activeInstances.clear();
+  }
+
   async processNext() {
-    if (queue.length === 0 || this.stopping) { 
-      this.processing = false; this.stopping = false; currentJob = null; io.emit('status', { active: false, status: 'idle' }); return; 
+    if (queue.length === 0 || this.stopping) {
+      this.processing = false; this.stopping = false; currentJob = null; io.emit('status', { active: false, status: 'idle' }); return;
     }
     currentJob = queue[0];
     io.emit('queue_update', queue);
     io.emit('status', { active: true, status: 'encoding', activeJob: { name: currentJob.input_folder } });
-    try { 
-      await this.processBatch(currentJob); 
+    try {
+      await this.processBatch(currentJob);
       if (!this.stopping) {
         queue.shift();
         await saveQueue();
         io.emit('queue_update', queue);
       }
-    } catch (err) { 
-      console.error('Batch error:', err); 
+    } catch (err) {
+      console.error('Batch error:', err);
       queue.shift();
       await saveQueue();
       io.emit('queue_update', queue);
@@ -275,7 +385,7 @@ class Worker {
   }
 
   async processBatch(batch) {
-    const { input_folder, encoder, crf, preset, tune, custom_flags, subfolder } = batch;
+    const { input_folder } = batch;
     if (!(await fs.pathExists(input_folder))) { this.log(`PATH NOT FOUND — ${input_folder} — aborting batch`, 'error'); return; }
     const stats = await fs.stat(input_folder);
     let files = [];
@@ -287,43 +397,121 @@ class Worker {
       files = [input_folder];
     }
 
-    for (let i = 0; i < files.length; i++) {
-      if (this.stopping) return;
-      const file = files[i];
-      const progressBase = (i / files.length) * 100;
-      const progressStep = 100 / files.length;
-      io.emit('status', {
-        active: true, status: 'encoding', activeJob: { name: path.basename(file) },
-        progress: progressBase, currentFile: path.basename(file), currentFilePath: file,
-        fileIndex: i + 1, totalFiles: files.length, queueLength: queue.length,
-        encoder: batch.encoder
+    // Load parallel encoding settings
+    const settings = await loadSettings();
+    const maxInstances = Math.min(settings.parallelInstances || 1, files.length);
+    const totalThreads = os.cpus().length;
+    const reservedCores = settings.reservedCores || 0;
+    const threadsPerCCD = settings.threadsPerCCD || 0;
+
+    // Compute thread allocations (skip for single instance with no reserved cores)
+    const useAffinity = maxInstances > 1 || reservedCores > 0;
+    const allocations = useAffinity
+      ? computeThreadAllocations(totalThreads, maxInstances, reservedCores, threadsPerCCD)
+      : null;
+
+    this.completedCount = 0;
+    this.totalFiles = files.length;
+    let nextFileIdx = 0;
+
+    const startNext = (slotIndex) => {
+      if (nextFileIdx >= files.length || this.stopping) return null;
+      const fileIdx = nextFileIdx++;
+      const file = files[fileIdx];
+      const allocation = allocations ? allocations[slotIndex] || null : null;
+
+      this.activeInstances.set(slotIndex, { child: null, file, fileIdx, progress: 0, stats: {} });
+      this.emitParallelStatus(batch);
+
+      const promise = this.encodeFile(file, batch, slotIndex, allocation, (fProg, encStats) => {
+        const inst = this.activeInstances.get(slotIndex);
+        if (inst) { inst.progress = fProg; inst.stats = encStats; }
+        this.emitParallelStatus(batch);
+      }).then(() => {
+        this.completedCount++;
+        this.activeInstances.delete(slotIndex);
+        return slotIndex;
+      }).catch((err) => {
+        this.log(`ENCODE ERROR — ${path.basename(file)} — ${err.message}`, 'error');
+        this.completedCount++;
+        this.activeInstances.delete(slotIndex);
+        return slotIndex;
       });
-      await this.encodeFile(file, batch, (fProg, encStats) => {
-        io.emit('status', {
-          active: true, status: 'encoding', activeJob: { name: path.basename(file) },
-          progress: progressBase + (fProg * progressStep / 100),
-          currentFile: path.basename(file), currentFilePath: file, fileIndex: i + 1, totalFiles: files.length,
-          queueLength: queue.length, encoder: batch.encoder, ...encStats
-        });
-      });
+
+      return { slotIndex, promise };
+    };
+
+    // Fill initial slots
+    const running = new Map(); // slotIndex -> promise
+    for (let i = 0; i < maxInstances; i++) {
+      const result = startNext(i);
+      if (result) running.set(result.slotIndex, result.promise);
     }
+
+    // As each finishes, start next file in that slot
+    while (running.size > 0 && !this.stopping) {
+      const finishedSlot = await Promise.race(running.values());
+      running.delete(finishedSlot);
+      const next = startNext(finishedSlot);
+      if (next) running.set(next.slotIndex, next.promise);
+    }
+
     if (!this.stopping) io.emit('status', { active: false, status: 'idle', progress: 100 });
   }
 
-  async encodeFile(file, batch, onProgress) {
+  emitParallelStatus(batch) {
+    const instances = [];
+    for (const [slotIndex, inst] of this.activeInstances) {
+      instances.push({
+        slotIndex,
+        currentFile: path.basename(inst.file),
+        currentFilePath: inst.file,
+        fileIndex: inst.fileIdx + 1,
+        progress: inst.progress || 0,
+        ...(inst.stats || {}),
+      });
+    }
+
+    // Overall progress: completed files + partial progress of active files
+    const partialSum = instances.reduce((sum, i) => sum + (i.progress || 0), 0);
+    const overallProgress = this.totalFiles > 0
+      ? ((this.completedCount / this.totalFiles) * 100) + (partialSum / this.totalFiles)
+      : 0;
+
+    const firstInst = instances[0] || {};
+    io.emit('status', {
+      active: true,
+      status: 'encoding',
+      activeJob: { name: currentJob?.input_folder || '' },
+      progress: overallProgress,
+      totalFiles: this.totalFiles,
+      completedFiles: this.completedCount,
+      queueLength: queue.length,
+      encoder: batch.encoder,
+      instances,
+      // Backwards compat for single-instance: keep top-level fields
+      currentFile: firstInst.currentFile,
+      currentFilePath: firstInst.currentFilePath,
+      fileIndex: firstInst.fileIndex,
+      ...firstInst,
+    });
+  }
+
+  async encodeFile(file, batch, slotIndex, allocation, onProgress) {
     const probeInfo = await probeVideo(file);
     const totalFrames = probeInfo.totalFrames;
-    if (totalFrames > 0) this.log(`Target acquired: ${path.basename(file)} — ${totalFrames} frames locked`, 'info');
-    else this.log(`Target acquired: ${path.basename(file)} — frame count unknown, limited telemetry`, 'info');
-    
-    return new Promise((resolve) => {
+    const slotPrefix = this.totalFiles > 1 && this.activeInstances.size > 1 ? `[${slotIndex + 1}] ` : '';
+    if (totalFrames > 0) this.log(`${slotPrefix}Target acquired: ${path.basename(file)} — ${totalFrames} frames locked`, 'info');
+    else this.log(`${slotPrefix}Target acquired: ${path.basename(file)} — frame count unknown, limited telemetry`, 'info');
+
+    return new Promise((resolve, reject) => {
       const { input_folder, encoder, crf, preset, tune, custom_flags, subfolder, auto_crop, crop, rename_audio } = batch;
       const defaultOutput = path.join(__dirname, '..', '..', 'output');
       const outputRoot = process.env.OUTPUT_DIR || defaultOutput;
-      
+
       // Calculate output directory relative to input_folder to preserve structure
       let outputDir = subfolder ? path.join(outputRoot, subfolder) : outputRoot;
-      
+
       try {
         const relativePath = path.relative(input_folder, path.dirname(file));
         if (relativePath && relativePath !== '.') {
@@ -332,24 +520,41 @@ class Worker {
       } catch (err) {
         console.error('Error calculating relative path:', err);
       }
-      
+
+      // Build custom flags with --lp if using thread allocation
+      let effectiveFlags = custom_flags || '';
+      if (allocation && allocation.threadCount > 0) {
+        effectiveFlags = `${effectiveFlags} --lp ${allocation.threadCount}`.trim();
+      }
+
       const args = [
-        '--input', file, 
-        '--output-dir', outputDir, 
-        '--encoder', encoder, 
-        '--crf', crf, 
-        '--preset', preset, 
-        '--tune', tune, 
-        '--custom-flags', custom_flags || "", 
-        '--auto-crop', auto_crop ? '1' : '0', 
+        '--input', file,
+        '--output-dir', outputDir,
+        '--encoder', encoder,
+        '--crf', crf,
+        '--preset', preset,
+        '--tune', tune,
+        '--custom-flags', effectiveFlags,
+        '--auto-crop', auto_crop ? '1' : '0',
         '--rename-audio', rename_audio ? '1' : '0'
       ];
-      
+
       if (crop) args.push('--crop', crop);
-      
-      const child = spawn('bash', [path.join(SCRIPTS_DIR, 'encode_single.sh'), ...args], { detached: true });
-      currentChild = child;
-      
+
+      // Spawn with taskset if available and allocation exists
+      let spawnCmd, spawnArgs;
+      if (allocation && tasksetAvailable) {
+        spawnCmd = 'taskset';
+        spawnArgs = ['--cpu-list', allocation.cpuList, 'bash', path.join(SCRIPTS_DIR, 'encode_single.sh'), ...args];
+      } else {
+        spawnCmd = 'bash';
+        spawnArgs = [path.join(SCRIPTS_DIR, 'encode_single.sh'), ...args];
+      }
+
+      const child = spawn(spawnCmd, spawnArgs, { detached: true });
+      const inst = this.activeInstances.get(slotIndex);
+      if (inst) inst.child = child;
+
       let cropInfo = null;
       let fileMeta = {
         resolution: probeInfo.width && probeInfo.height ? `${probeInfo.width}x${probeInfo.height}` : null,
@@ -359,22 +564,20 @@ class Worker {
       const parseOutput = (out) => {
         const result = parseEncodeOutput(stripAnsi(out), totalFrames, cropInfo);
         if (result.cropInfo) { cropInfo = result.cropInfo; }
-        // Accumulate metadata across chunks
         if (result.meta.color) fileMeta.color = result.meta.color;
         if (result.meta.sourceFps) fileMeta.sourceFps = result.meta.sourceFps;
         if (result.meta.audioTracks) fileMeta.audioTracks = result.meta.audioTracks;
         if (result.progress >= 0) { onProgress(result.progress, { ...result.stats, fileMeta }); return; }
         if (result.muxProgress >= 0) { onProgress(result.muxProgress, { phase: 'muxing', fileMeta }); }
       };
-      
-      child.stdout.on('data', (d) => { const out = d.toString(); this.log(out, 'stdout'); parseOutput(out); });
-      child.stderr.on('data', (d) => { const out = d.toString(); this.log(out, 'stderr'); parseOutput(out); });
-      
-      child.on('close', (code) => { 
-        currentChild = null; 
-        if (code !== 0) this.log(`ENCODE FAILED — ${path.basename(file)} — exit code ${code}`, 'error');
-        else this.log(`ENCODE COMPLETE — ${path.basename(file)} — all systems nominal`, 'info');
-        resolve(); 
+
+      child.stdout.on('data', (d) => { const out = d.toString(); this.log(`${slotPrefix}${out}`, 'stdout'); parseOutput(out); });
+      child.stderr.on('data', (d) => { const out = d.toString(); this.log(`${slotPrefix}${out}`, 'stderr'); parseOutput(out); });
+
+      child.on('close', (code) => {
+        if (code !== 0) this.log(`${slotPrefix}ENCODE FAILED — ${path.basename(file)} — exit code ${code}`, 'error');
+        else this.log(`${slotPrefix}ENCODE COMPLETE — ${path.basename(file)} — all systems nominal`, 'info');
+        resolve();
       });
     });
   }
@@ -431,6 +634,16 @@ app.get('/api/system/metrics', (req, res) => {
     uptime: os.uptime(),
     loadAvg: os.loadavg()
   });
+});
+
+app.get('/api/system/thread-preview', async (req, res) => {
+  const settings = await loadSettings();
+  const totalThreads = os.cpus().length;
+  const instances = parseInt(req.query.instances) || settings.parallelInstances || 1;
+  const reserved = parseInt(req.query.reserved) || settings.reservedCores || 0;
+  const perCCD = parseInt(req.query.perCCD) || settings.threadsPerCCD || 0;
+  const allocations = computeThreadAllocations(totalThreads, instances, reserved, perCCD);
+  res.json({ totalThreads, allocations, tasksetAvailable });
 });
 
 // --- Waveform Generation ---

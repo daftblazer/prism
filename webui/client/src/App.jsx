@@ -15,14 +15,35 @@ const socket = io();
 
 // --- Helper Components ---
 
-const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled, lightMode, setLightMode }) => {
+const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled, lightMode, setLightMode, systemMetrics }) => {
   const [releaseGroup, setReleaseGroup] = useState(appSettings?.releaseGroup || '');
+  const [parallelInstances, setParallelInstances] = useState(appSettings?.parallelInstances || 1);
+  const [reservedCores, setReservedCores] = useState(appSettings?.reservedCores || 0);
+  const [threadsPerCCD, setThreadsPerCCD] = useState(appSettings?.threadsPerCCD || 0);
+  const [threadPreview, setThreadPreview] = useState(null);
   useEffect(() => { setReleaseGroup(appSettings?.releaseGroup || ''); }, [appSettings?.releaseGroup]);
+  useEffect(() => { setParallelInstances(appSettings?.parallelInstances || 1); }, [appSettings?.parallelInstances]);
+  useEffect(() => { setReservedCores(appSettings?.reservedCores || 0); }, [appSettings?.reservedCores]);
+  useEffect(() => { setThreadsPerCCD(appSettings?.threadsPerCCD || 0); }, [appSettings?.threadsPerCCD]);
   const handleReleaseGroupSave = () => { saveAppSettings({ releaseGroup }); };
+  const handleEncodingSave = (overrides = {}) => {
+    const vals = { parallelInstances: overrides.parallelInstances ?? parallelInstances, reservedCores: overrides.reservedCores ?? reservedCores, threadsPerCCD: overrides.threadsPerCCD ?? threadsPerCCD };
+    saveAppSettings(vals);
+  };
+  useEffect(() => {
+    const fetchPreview = async () => {
+      try {
+        const { data } = await axios.get('/api/system/thread-preview', { params: { instances: parallelInstances, reserved: reservedCores, perCCD: threadsPerCCD } });
+        setThreadPreview(data);
+      } catch { setThreadPreview(null); }
+    };
+    fetchPreview();
+  }, [parallelInstances, reservedCores, threadsPerCCD]);
   const rowCls = "flex items-center justify-between py-4 border-b border-sf";
   const labelCls = "text-[14px] font-bold uppercase tracking-widest text-nerv";
   const toggleBase = "px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border";
   const toggleOff = "border-sf bg-void text-steel-dim";
+  const numInputCls = "w-20 border border-sf bg-void px-3 py-1.5 text-xs font-bold text-steel font-sys text-right";
   return (
     <div className="space-y-8">
       <div>
@@ -53,6 +74,53 @@ const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled,
               {lightMode ? 'On' : 'Off'}
             </button>
           </div>
+        </div>
+      </div>
+      <div>
+        <h3 className="nerv-title text-nerv text-sm mb-4">Encoding</h3>
+        <div className="border border-sf bg-void-panel">
+          <div className={cn(rowCls, "px-4")}>
+            <div>
+              <span className={labelCls}>Parallel Instances</span>
+              <p className="text-[11px] text-steel-dim mt-0.5">Number of simultaneous encode processes (1 = sequential)</p>
+            </div>
+            <input type="number" min={1} max={8} value={parallelInstances} onChange={e => { const v = Math.max(1, Math.min(8, parseInt(e.target.value) || 1)); setParallelInstances(v); }} onBlur={() => handleEncodingSave()} onKeyDown={e => e.key === 'Enter' && handleEncodingSave()} className={numInputCls} />
+          </div>
+          <div className={cn(rowCls, "px-4")}>
+            <div>
+              <span className={labelCls}>Reserved Cores</span>
+              <p className="text-[11px] text-steel-dim mt-0.5">Cores reserved for host OS (reserves both thread and hyperthread, from core 0 upward)</p>
+            </div>
+            <input type="number" min={0} max={Math.floor((systemMetrics?.cores || 32) / 2)} value={reservedCores} onChange={e => { const v = Math.max(0, parseInt(e.target.value) || 0); setReservedCores(v); }} onBlur={() => handleEncodingSave()} onKeyDown={e => e.key === 'Enter' && handleEncodingSave()} className={numInputCls} />
+          </div>
+          <div className={cn(rowCls, "px-4")}>
+            <div>
+              <span className={labelCls}>Threads per CCD</span>
+              <p className="text-[11px] text-steel-dim mt-0.5">Enable CCD-aware allocation for AMD CPUs (0 = disabled, e.g. 16 for 8-core CCDs with SMT)</p>
+            </div>
+            <input type="number" min={0} value={threadsPerCCD} onChange={e => { const v = Math.max(0, parseInt(e.target.value) || 0); setThreadsPerCCD(v); }} onBlur={() => handleEncodingSave()} onKeyDown={e => e.key === 'Enter' && handleEncodingSave()} className={numInputCls} />
+          </div>
+          {threadPreview && (
+            <div className="px-4 py-4 border-t border-sf">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[12px] font-bold uppercase tracking-widest text-steel">Thread Allocation Preview</span>
+                <span className="text-[10px] font-bold text-steel-dim">({threadPreview.totalThreads} threads{threadPreview.tasksetAvailable ? ', taskset available' : ', taskset unavailable'})</span>
+              </div>
+              {threadPreview.allocations?.length > 0 ? (
+                <div className="space-y-2">
+                  {threadPreview.allocations.map((alloc, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="text-[11px] font-bold text-nerv w-20 shrink-0">Instance {i + 1}</span>
+                      <code className="text-[11px] font-bold text-data-green font-sys">{alloc.cpuList}</code>
+                      <span className="text-[10px] font-bold text-steel-dim">({alloc.threadCount} threads, --lp {alloc.threadCount})</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-steel-dim">No allocations — check reserved cores count</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <div>
@@ -301,11 +369,19 @@ const EncodingStatsPanel = ({ status }) => {
             </div>
             <div className="space-y-1.5">
               <h4 className="text-[12px] font-bold text-nerv uppercase tracking-widest">Performance</h4>
-              <div className="grid grid-cols-3 gap-1.5">
-                <InfoCell label="Speed" value={status.fps ? `${status.fps} fps` : null} accent />
-                <InfoCell label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
-                <InfoCell label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
-              </div>
+              {status.instances?.length > 1 ? (
+                <div className="grid grid-cols-3 gap-1.5">
+                  <InfoCell label="Total Speed" value={(() => { const total = status.instances.reduce((sum, i) => sum + (parseFloat(i.fps) || 0), 0); return total > 0 ? `${total.toFixed(1)} fps` : null; })()} accent />
+                  <InfoCell label="Instances" value={`${status.instances.length} active`} accent />
+                  <InfoCell label="Completed" value={`${status.completedFiles || 0} / ${status.totalFiles || 0}`} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-1.5">
+                  <InfoCell label="Speed" value={status.fps ? `${status.fps} fps` : null} accent />
+                  <InfoCell label="Bitrate" value={status.bitrate ? `${status.bitrate} kb/s` : null} />
+                  <InfoCell label="Size" value={status.size ? `${status.size} MB${status.estSize ? ` / ~${status.estSize} MB` : ''}` : null} />
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <h4 className="text-[12px] font-bold text-nerv uppercase tracking-widest">Timing</h4>
@@ -491,7 +567,9 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
               )}
               {isEncoding && !isTestEncode && (
                 <span className="text-[12px] font-bold text-data-green">
-                  {status.fileIndex && status.totalFiles ? `File ${status.fileIndex} of ${status.totalFiles}` : 'Starting...'}
+                  {status.instances?.length > 1
+                    ? `${status.completedFiles || 0} / ${status.totalFiles || 0} files (${status.instances.length} parallel)`
+                    : (status.fileIndex && status.totalFiles ? `File ${status.fileIndex} of ${status.totalFiles}` : 'Starting...')}
                   {status.phase === 'muxing' && ' — Muxing'}
                 </span>
               )}
@@ -517,13 +595,37 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
             <h3 className="text-lg font-bold text-steel leading-snug break-words">{activeJob?.name || 'Encode Operation'}</h3>
             {isPaused && !isTestEncode && <p className="text-sm font-bold text-nerv-dim mt-1">Job is waiting to resume</p>}
           </div>
-          {/* Spacer to push progress + percentage to bottom */}
-          <div className="flex-1" />
-          {/* Progress section at bottom */}
+          {/* Multi-instance cards */}
+          {isEncoding && status?.instances?.length > 1 ? (
+            <div className="flex-1 min-h-0 overflow-auto px-5 space-y-1.5">
+              {status.instances.map((inst, i) => (
+                <div key={inst.slotIndex} className="border border-sf bg-void p-2.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[10px] font-bold text-nerv uppercase shrink-0">[{inst.slotIndex}]</span>
+                      <span className="text-[12px] font-bold text-steel truncate">{inst.currentFile || 'Starting...'}</span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {inst.fps && <span className="text-[11px] font-bold text-data-green tabular-nums">{inst.fps} fps</span>}
+                      <span className="text-[11px] font-bold text-data-green tabular-nums w-12 text-right">{(inst.progress || 0).toFixed(1)}%</span>
+                    </div>
+                  </div>
+                  <div className="w-full h-1.5 bg-void border border-sf overflow-hidden">
+                    <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${inst.progress || 0}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex-1" />
+          )}
+          {/* Overall progress section at bottom */}
           {isEncoding && (
-            <div className="px-5 pb-4 space-y-2">
+            <div className="px-5 pb-4 pt-2 space-y-2">
               <div className="flex items-end justify-between">
-                <span className="text-[12px] font-bold uppercase tracking-widest text-steel-dim">Progress</span>
+                <span className="text-[12px] font-bold uppercase tracking-widest text-steel-dim">
+                  {status?.instances?.length > 1 ? `Overall (${status.instances.length} instances)` : 'Progress'}
+                </span>
                 <p className={cn("text-4xl font-black tabular-nums leading-none", isTestEncode ? "text-wire-cyan glow-cyan" : "text-data-green glow-green")}>{progress.toFixed(1)}%</p>
               </div>
               <div className="w-full h-2.5 bg-void border border-sf overflow-hidden">
@@ -1826,7 +1928,7 @@ const App = () => {
             {activeTab === 'queue' && <QueueSection queue={queue} />}
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
             {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}
-            {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} />}
+            {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} systemMetrics={systemMetrics} />}
           </div>
         )}
       </main>
