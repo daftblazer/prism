@@ -99,6 +99,7 @@ TMP_AV1="$WORK_DIR/video.av1"
 TMP_LOG="$WORK_DIR/encode.log"
 TMP_AUDIO_SUMMARY="$WORK_DIR/audio_plan.txt"
 TMP_AUDIO_DIR="$WORK_DIR/audio_tracks"
+TMP_TAGS="$WORK_DIR/tags.xml"
 
 cleanup() {
   local exit_code=$?
@@ -355,8 +356,39 @@ for plan in "${AUDIO_PLAN_ARR[@]}"; do
   TMP_AUDIO_TITLES+=("$title")
 done
 
-# 4) Final mux
-mkvmerge_args=(-o "$OUT_MKV" --title "$BASENAME")
+# 4) Build encoding settings tag
+ENCODER_VERSION="$("$ENCODER" 2>&1 | head -1 || echo "unknown")"
+ENCODER_NAME="$(basename "$(dirname "$(dirname "$ENCODER")")")"
+
+SETTINGS_PARTS=()
+SETTINGS_PARTS+=("prism / ${ENCODER_NAME}")
+SETTINGS_PARTS+=("${ENCODER_VERSION}")
+SETTINGS_PARTS+=("--crf ${CRF} --preset ${PRESET} --tune ${TUNE} --keyint ${KEYINT}")
+if [[ -n "$CUSTOM_FLAGS" ]]; then
+  SETTINGS_PARTS+=("${CUSTOM_FLAGS}")
+fi
+if [[ -n "$VIDEO_FILTER" ]]; then
+  SETTINGS_PARTS+=("crop: ${VIDEO_FILTER#crop=}")
+fi
+SETTINGS_PARTS+=("color: primaries=${COLOR_PRIMARIES} transfer=${TRANSFER_CHARS} matrix=${MATRIX_COEFFS} range=${COLOR_RANGE}")
+
+ENCODING_SETTINGS="$(IFS=' | '; echo "${SETTINGS_PARTS[*]}")"
+
+cat > "$TMP_TAGS" <<XMLEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<Tags>
+  <Tag>
+    <Targets/>
+    <Simple>
+      <Name>ENCODING_SETTINGS</Name>
+      <String>${ENCODING_SETTINGS}</String>
+    </Simple>
+  </Tag>
+</Tags>
+XMLEOF
+
+# 5) Final mux
+mkvmerge_args=(-o "$OUT_MKV" --title "$BASENAME" --global-tags "$TMP_TAGS")
 if [[ -n "$VIDEO_FPS" ]]; then
   mkvmerge_args+=(--default-duration "0:${VIDEO_FPS}fps")
 fi
