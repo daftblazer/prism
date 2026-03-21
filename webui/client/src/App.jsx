@@ -697,6 +697,8 @@ const QueueSection = ({ queue }) => {
   const clearQueue = async () => { try { await axios.post('/api/queue/clear'); } catch (e) { console.error(e); } };
   const removeJob = async (id) => { try { await axios.delete(`/api/queue/${id}`); } catch (e) { console.error(e); } };
   const moveJob = async (id, direction) => { try { await axios.post(`/api/queue/${id}/move`, { direction }); } catch (e) { console.error(e); } };
+  const [expandedId, setExpandedId] = useState(null);
+  const tagCls = "text-[11px] font-bold uppercase px-1.5 py-0.5 border border-sf text-steel-dim";
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -714,14 +716,38 @@ const QueueSection = ({ queue }) => {
         </div>
       ) : (
         <div className="grid gap-2">{queue.map((batch, i) => (
-          <div key={batch.id || i} className="border border-sf p-4 flex items-center gap-4 bg-void-panel">
-            <div className="flex flex-col gap-0.5">
-              <button onClick={() => moveJob(batch.id, 'up')} disabled={i === 0} title="Move up" className={cn("p-0.5 transition-all", i === 0 ? "text-steel-dim/20 cursor-not-allowed" : "text-steel-dim hover:text-nerv")}><ChevronUp className="w-4 h-4" /></button>
-              <button onClick={() => moveJob(batch.id, 'down')} disabled={i === queue.length - 1} title="Move down" className={cn("p-0.5 transition-all", i === queue.length - 1 ? "text-steel-dim/20 cursor-not-allowed" : "text-steel-dim hover:text-nerv")}><ChevronDown className="w-4 h-4" /></button>
+          <div key={batch.id || i} className="border border-sf bg-void-panel">
+            <div className="p-4 flex items-center gap-4">
+              <div className="flex flex-col gap-0.5">
+                <button onClick={() => moveJob(batch.id, 'up')} disabled={i === 0} title="Move up" className={cn("p-0.5 transition-all", i === 0 ? "text-steel-dim/20 cursor-not-allowed" : "text-steel-dim hover:text-nerv")}><ChevronUp className="w-4 h-4" /></button>
+                <button onClick={() => moveJob(batch.id, 'down')} disabled={i === queue.length - 1} title="Move down" className={cn("p-0.5 transition-all", i === queue.length - 1 ? "text-steel-dim/20 cursor-not-allowed" : "text-steel-dim hover:text-nerv")}><ChevronDown className="w-4 h-4" /></button>
+              </div>
+              <div className="w-9 h-9 bg-nerv/10 flex items-center justify-center shrink-0"><Folder className="w-4 h-4 text-nerv" /></div>
+              <div className="flex-1 min-w-0" onClick={() => setExpandedId(expandedId === batch.id ? null : batch.id)} style={{ cursor: 'pointer' }}>
+                <h4 className="font-bold text-sm truncate text-steel">{batch.input_folder}</h4>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className={tagCls}>{batch.encoder.split('/').pop()}</span>
+                  <span className={tagCls}>CRF {batch.crf}</span>
+                  <span className={tagCls}>P{batch.preset}</span>
+                  <span className={tagCls}>T{batch.tune || 0}</span>
+                  {batch.subfolder && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-wire-cyan/30 text-wire-cyan">{batch.subfolder}</span>}
+                  {batch.auto_crop && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-data-green/30 text-data-green">Crop</span>}
+                  {batch.rename_audio && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-data-green/30 text-data-green">Rename Audio</span>}
+                </div>
+              </div>
+              {batch.id && <button onClick={() => removeJob(batch.id)} title="Remove from queue" className="p-1.5 text-steel-dim hover:text-alert-red transition-all"><X className="w-3.5 h-3.5" /></button>}
             </div>
-            <div className="w-9 h-9 bg-nerv/10 flex items-center justify-center"><Folder className="w-4 h-4 text-nerv" /></div>
-            <div className="flex-1 min-w-0"><h4 className="font-bold text-sm truncate text-steel">{batch.input_folder}</h4><p className="text-[15px] font-bold uppercase mt-0.5 text-steel-dim">Encoder: {batch.encoder.split('/').pop()} | CRF {batch.crf} | Preset {batch.preset}</p></div>
-            {batch.id && <button onClick={() => removeJob(batch.id)} title="Remove from queue" className="p-1.5 text-steel-dim hover:text-alert-red transition-all"><X className="w-3.5 h-3.5" /></button>}
+            {expandedId === batch.id && (
+              <div className="border-t border-sf px-4 py-3 grid grid-cols-2 gap-x-8 gap-y-2">
+                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Input</span><span className="text-[12px] font-bold text-steel break-all">{batch.input_folder}</span></div>
+                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Encoder</span><span className="text-[12px] font-bold text-steel">{batch.encoder}</span></div>
+                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">CRF / Preset / Tune</span><span className="text-[12px] font-bold text-steel">{batch.crf} / {batch.preset} / {batch.tune || 0}</span></div>
+                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Output Subfolder</span><span className="text-[12px] font-bold text-steel">{batch.subfolder || '—'}</span></div>
+                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Custom Flags</span><span className="text-[12px] font-bold text-steel font-sys">{batch.custom_flags || '—'}</span></div>
+                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Options</span><span className="text-[12px] font-bold text-steel">{[batch.auto_crop && 'Auto-Crop', batch.rename_audio && 'Rename Audio'].filter(Boolean).join(', ') || '—'}</span></div>
+                {batch.addedAt && <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Added</span><span className="text-[12px] font-bold text-steel">{new Date(batch.addedAt).toLocaleString()}</span></div>}
+              </div>
+            )}
           </div>
         ))}</div>
       )}

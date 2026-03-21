@@ -1,0 +1,12 @@
+output/
+input/
+config/
+.git/
+webui/client/node_modules/
+webui/server/node_modules/
+webui/client/dist/
+*.mkv
+*.mp4
+*.mov
+*.avi
+*.webm
