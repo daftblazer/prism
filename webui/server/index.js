@@ -1053,7 +1053,42 @@ app.get('/api/test-encodes/image', async (req, res) => {
   }
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '0.1.0', channel: 'release' }));
+app.delete('/api/test-encodes/session', async (req, res) => {
+  try {
+    const sessionPath = req.query.session;
+    if (!sessionPath) return res.status(400).json({ error: 'session query param required' });
+    const defaultOutput = path.join(__dirname, '..', '..', 'output');
+    const testEncodesRoot = path.resolve(path.join(process.env.OUTPUT_DIR || defaultOutput, 'TestEncodes'));
+    const resolved = path.resolve(sessionPath);
+    if (!resolved.startsWith(testEncodesRoot)) return res.status(403).json({ error: 'Path outside TestEncodes directory' });
+    if (!await fs.pathExists(resolved)) return res.status(404).json({ error: 'Session not found' });
+    await fs.remove(resolved);
+    // Clean up empty parent basename dir
+    const parent = path.dirname(resolved);
+    if (await fs.pathExists(parent)) {
+      const remaining = await fs.readdir(parent);
+      if (remaining.length === 0) await fs.remove(parent);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting session:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/test-encodes/all', async (req, res) => {
+  try {
+    const defaultOutput = path.join(__dirname, '..', '..', 'output');
+    const testEncodesRoot = path.join(process.env.OUTPUT_DIR || defaultOutput, 'TestEncodes');
+    if (await fs.pathExists(testEncodesRoot)) await fs.remove(testEncodesRoot);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error clearing test encodes:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/version', (req, res) => res.json({ version: '0.1.1', channel: 'release' }));
 
 if (fs.existsSync(frontendDist)) app.get('*', (req, res) => { if (!req.path.startsWith('/api')) res.sendFile(path.join(frontendDist, 'index.html')); });
 

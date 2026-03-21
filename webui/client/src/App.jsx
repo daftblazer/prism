@@ -1201,6 +1201,22 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen, batchActive }) => 
             <option key={s.path} value={s.path}>{s.label} ({s.variants.length} variants)</option>
           ))}
         </select>
+        {selectedSession && (
+          <button onClick={async () => {
+            if (!confirm('Delete this session?')) return;
+            try { await axios.delete('/api/test-encodes/session', { params: { session: selectedSession } }); setSelectedSession(''); setSessionData(null); fetchSessions(); } catch (e) { alert(e.response?.data?.error || e.message); }
+          }} title="Delete selected session" className="p-2.5 text-steel-dim hover:text-alert-red transition-all">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {allSessions.length > 0 && (
+          <button onClick={async () => {
+            if (!confirm(`Delete all ${allSessions.length} test encode sessions?`)) return;
+            try { await axios.delete('/api/test-encodes/all'); setSelectedSession(''); setSessionData(null); fetchSessions(); } catch (e) { alert(e.response?.data?.error || e.message); }
+          }} title="Delete all sessions" className="p-2.5 text-steel-dim hover:text-alert-red transition-all">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
         <button onClick={fetchSessions} title="Refresh sessions" className="p-2.5 text-steel-dim hover:text-nerv transition-all">
           <RefreshCcw className="w-3.5 h-3.5" />
         </button>
