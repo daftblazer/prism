@@ -5,7 +5,7 @@ import {
   Plus, List, Cpu, Activity, Folder, X, Terminal, Square,
   RefreshCcw, CheckCircle2, Clock, AlertCircle, CornerLeftUp, HardDrive,
   Settings, Wrench, Play, Search, StopCircle, FileVideo, File, Star,
-  FlaskConical, Trash2, HelpCircle, ChevronLeft, ChevronRight, Columns, Image, Pause
+  FlaskConical, Trash2, HelpCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Columns, Image, Pause
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -696,6 +696,7 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
 const QueueSection = ({ queue }) => {
   const clearQueue = async () => { try { await axios.post('/api/queue/clear'); } catch (e) { console.error(e); } };
   const removeJob = async (id) => { try { await axios.delete(`/api/queue/${id}`); } catch (e) { console.error(e); } };
+  const moveJob = async (id, direction) => { try { await axios.post(`/api/queue/${id}/move`, { direction }); } catch (e) { console.error(e); } };
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -714,6 +715,10 @@ const QueueSection = ({ queue }) => {
       ) : (
         <div className="grid gap-2">{queue.map((batch, i) => (
           <div key={batch.id || i} className="border border-sf p-4 flex items-center gap-4 bg-void-panel">
+            <div className="flex flex-col gap-0.5">
+              <button onClick={() => moveJob(batch.id, 'up')} disabled={i === 0} title="Move up" className={cn("p-0.5 transition-all", i === 0 ? "text-steel-dim/20 cursor-not-allowed" : "text-steel-dim hover:text-nerv")}><ChevronUp className="w-4 h-4" /></button>
+              <button onClick={() => moveJob(batch.id, 'down')} disabled={i === queue.length - 1} title="Move down" className={cn("p-0.5 transition-all", i === queue.length - 1 ? "text-steel-dim/20 cursor-not-allowed" : "text-steel-dim hover:text-nerv")}><ChevronDown className="w-4 h-4" /></button>
+            </div>
             <div className="w-9 h-9 bg-nerv/10 flex items-center justify-center"><Folder className="w-4 h-4 text-nerv" /></div>
             <div className="flex-1 min-w-0"><h4 className="font-bold text-sm truncate text-steel">{batch.input_folder}</h4><p className="text-[15px] font-bold uppercase mt-0.5 text-steel-dim">Encoder: {batch.encoder.split('/').pop()} | CRF {batch.crf} | Preset {batch.preset}</p></div>
             {batch.id && <button onClick={() => removeJob(batch.id)} title="Remove from queue" className="p-1.5 text-steel-dim hover:text-alert-red transition-all"><X className="w-3.5 h-3.5" /></button>}

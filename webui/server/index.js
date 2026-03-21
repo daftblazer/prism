@@ -805,6 +805,16 @@ app.delete('/api/queue/:id', async (req, res) => {
   if (idx !== -1) { queue.splice(idx, 1); await saveQueue(); io.emit('queue_update', queue); res.json({ success: true }); }
   else res.status(404).json({ error: 'Missing' });
 });
+app.post('/api/queue/:id/move', async (req, res) => {
+  const { direction } = req.body;
+  const idx = queue.findIndex(b => b.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (newIdx < 0 || newIdx >= queue.length) return res.json({ success: false, message: 'Already at edge' });
+  [queue[idx], queue[newIdx]] = [queue[newIdx], queue[idx]];
+  await saveQueue(); io.emit('queue_update', queue);
+  res.json({ success: true });
+});
 app.get('/api/status', (req, res) => {
   res.json(getCurrentStatus());
 });
