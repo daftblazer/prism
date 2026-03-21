@@ -272,5 +272,17 @@
       { "name": "DURATION", "label": "Sample Duration (seconds)", "type": "number", "default": "60" },
       { "name": "START_TIME", "label": "Start Time (seconds, blank=auto)", "type": "string", "default": "" }
     ]
+  },
+  {
+    "id": "mediainfo",
+    "name": "MediaInfo",
+    "description": "Display detailed media metadata for a file or all videos in a directory.",
+    "category": "analysis",
+    "mode": "read-only",
+    "script": "mediainfo.sh",
+    "envVars": [
+      { "name": "SOURCE_FILE", "label": "Source File (single file)", "type": "file", "default": "" },
+      { "name": "INPUT_DIR", "label": "Input Directory (all videos)", "type": "path", "default": "" }
+    ]
   }
 ]
