@@ -225,12 +225,13 @@ const EncodingStatsPanel = ({ status }) => {
   const isEncoding = status?.active && status.status === 'encoding';
   const isPaused = status?.status === 'paused';
   const hasStats = isEncoding || isPaused;
-  const currentState = status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle';
+  const isTestEncode = status?.testEncode;
+  const currentState = isTestEncode ? 'Test Encode' : (status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle');
 
   const InfoCell = ({ label, value, accent }) => (
     <div className="bg-void p-2.5 border border-sf">
       <span className="text-[11px] font-bold text-steel-dim uppercase block">{label}</span>
-      <span className={cn("text-[17px] font-bold", accent ? "text-data-green" : "text-steel")}>{value || '—'}</span>
+      <span className={cn("text-[17px] font-bold", accent ? (isTestEncode ? "text-wire-cyan" : "text-data-green") : "text-steel")}>{value || '—'}</span>
     </div>
   );
 
@@ -409,13 +410,14 @@ const StatusCard = ({ label, value }) => {
 const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoScroll, systemMetrics }) => {
   const activeJob = status?.activeJob;
   const progress = status?.progress || 0;
+  const isTestEncode = status?.testEncode;
   const handleScroll = () => {
     if (!logRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = logRef.current;
     setAutoScroll(scrollHeight - scrollTop - clientHeight < 60);
   };
   const pauseEncode = async () => { try { await axios.post('/api/pause'); } catch (e) { console.error(e); } };
-  const stopEncode = async () => { try { await axios.post('/api/stop'); } catch (e) { console.error(e); } };
+  const stopEncode = async () => { try { await axios.post(isTestEncode ? '/api/test-encode/stop' : '/api/stop'); } catch (e) { console.error(e); } };
   const resumeEncode = async () => { try { await axios.post('/api/resume'); } catch (e) { console.error(e); } };
   const isEncoding = status?.active && status.status === 'encoding';
   const isPaused = status?.status === 'paused';
@@ -444,37 +446,46 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
     <div style={gridStyle}>
       {/* Top-left: encode panel or status cards */}
       {(isEncoding || isPaused) ? (
-        <div style={{ gridArea: 'encode' }} className="border border-data-green-dim/30 bg-void-panel min-h-0 flex flex-col overflow-hidden">
+        <div style={{ gridArea: 'encode' }} className={cn("border bg-void-panel min-h-0 flex flex-col overflow-hidden", isTestEncode ? "border-wire-cyan-dim/30" : "border-data-green-dim/30")}>
           {/* Header row: status badges + controls */}
           <div className="flex items-center justify-between px-5 pt-4 pb-2 gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border border-data-green-dim/30 text-data-green bg-data-green/5">
-                {status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle'}
+              {isTestEncode && <FlaskConical className="w-3.5 h-3.5 text-wire-cyan" />}
+              <span className={cn("text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border", isTestEncode ? "border-wire-cyan-dim/30 text-wire-cyan bg-wire-cyan/5" : "border-data-green-dim/30 text-data-green bg-data-green/5")}>
+                {isTestEncode ? 'Test Encode' : (status?.status ? status.status.charAt(0).toUpperCase() + status.status.slice(1) : 'Idle')}
               </span>
-              <span className="text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-steel-dim">
-                {`${status?.queueLength || 0} Queued`}
-              </span>
-              {isEncoding && (
+              {!isTestEncode && (
+                <span className="text-[12px] font-bold uppercase tracking-widest px-2 py-0.5 border border-sf text-steel-dim">
+                  {`${status?.queueLength || 0} Queued`}
+                </span>
+              )}
+              {isEncoding && !isTestEncode && (
                 <span className="text-[12px] font-bold text-data-green">
                   {status.fileIndex && status.totalFiles ? `File ${status.fileIndex} of ${status.totalFiles}` : 'Starting...'}
                   {status.phase === 'muxing' && ' — Muxing'}
                 </span>
               )}
+              {isEncoding && isTestEncode && (
+                <span className="text-[12px] font-bold text-wire-cyan">
+                  {status.phaseLabel || status.phase}
+                  {status.variantIndex > 0 && ` (${status.variantIndex} of ${status.totalVariants})`}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {isPaused && (
+              {isPaused && !isTestEncode && (
                 <button onClick={resumeEncode} title="Resume encoding" className="flex items-center gap-2 px-4 py-2 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 uppercase tracking-wider"><Play className="w-3.5 h-3.5" /> Resume</button>
               )}
-              {isEncoding && (
+              {isEncoding && !isTestEncode && (
                 <button onClick={pauseEncode} title="Pause encoding" className="p-2 bg-nerv/15 text-nerv hover:bg-nerv hover:text-black transition-all active:scale-95"><Pause className="w-4 h-4" /></button>
               )}
-              <button onClick={stopEncode} title="Stop and remove from queue" className="p-2 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
+              <button onClick={stopEncode} title={isTestEncode ? "Stop test encode" : "Stop and remove from queue"} className="p-2 bg-alert-red/15 text-alert-red hover:bg-alert-red hover:text-black transition-all active:scale-95"><Square className="w-4 h-4" /></button>
             </div>
           </div>
           {/* Title — full width, allowed to wrap */}
           <div className="px-5 pb-3">
             <h3 className="text-lg font-bold text-steel leading-snug break-words">{activeJob?.name || 'Encode Operation'}</h3>
-            {isPaused && <p className="text-sm font-bold text-nerv-dim mt-1">Job is waiting to resume</p>}
+            {isPaused && !isTestEncode && <p className="text-sm font-bold text-nerv-dim mt-1">Job is waiting to resume</p>}
           </div>
           {/* Spacer to push progress + percentage to bottom */}
           <div className="flex-1" />
@@ -483,10 +494,10 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
             <div className="px-5 pb-4 space-y-2">
               <div className="flex items-end justify-between">
                 <span className="text-[12px] font-bold uppercase tracking-widest text-steel-dim">Progress</span>
-                <p className="text-4xl font-black tabular-nums text-data-green glow-green leading-none">{progress.toFixed(1)}%</p>
+                <p className={cn("text-4xl font-black tabular-nums leading-none", isTestEncode ? "text-wire-cyan glow-cyan" : "text-data-green glow-green")}>{progress.toFixed(1)}%</p>
               </div>
               <div className="w-full h-2.5 bg-void border border-sf overflow-hidden">
-                <div className="h-full bg-data-green transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
+                <div className={cn("h-full transition-all duration-500 ease-out", isTestEncode ? "bg-wire-cyan" : "bg-data-green")} style={{ width: `${progress}%` }} />
               </div>
             </div>
           )}
@@ -1018,7 +1029,7 @@ const ToolsSection = ({ toolLogs, setToolLogs, toolStatus, toolLogRef, appSettin
   );
 };
 
-const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
+const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen, batchActive }) => {
   const [sessions, setSessions] = useState([]);
   const [selectedSession, setSelectedSession] = useState('');
   const [sessionData, setSessionData] = useState(null);
@@ -1177,7 +1188,7 @@ const ComparePage = ({ testEncodeStatus, setIsTestEncodeOpen }) => {
     <div className="space-y-4">
       {/* Top bar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <button onClick={() => setIsTestEncodeOpen(true)} className="flex items-center gap-2 px-4 py-2.5 transition-all font-bold text-xs active:scale-95 border border-sf bg-void-panel text-steel hover:text-wire-cyan hover:border-wire-cyan-dim/30 uppercase tracking-wider">
+        <button onClick={() => setIsTestEncodeOpen(true)} disabled={batchActive} className={cn("flex items-center gap-2 px-4 py-2.5 transition-all font-bold text-xs active:scale-95 border uppercase tracking-wider", batchActive ? "border-sf bg-void-panel text-steel-dim cursor-not-allowed" : "border-sf bg-void-panel text-steel hover:text-wire-cyan hover:border-wire-cyan-dim/30")}>
           <FlaskConical className="w-3.5 h-3.5" /> New Test Encode
         </button>
         <select
@@ -1641,7 +1652,7 @@ const App = () => {
             </button>
             {settingsOpen && <SettingsPanel appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} />}
           </div>
-          <button onClick={() => setIsModalOpen(true)} className="w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs bg-nerv text-black hover:bg-nerv-hot transition-all active:scale-95 tracking-wider uppercase">
+          <button onClick={() => setIsModalOpen(true)} disabled={testRunning} className={cn("w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs transition-all active:scale-95 tracking-wider uppercase", testRunning ? "bg-steel-dim/30 text-steel-dim cursor-not-allowed" : "bg-nerv text-black hover:bg-nerv-hot")}>
             <Plus className="w-3.5 h-3.5" />Add Batch
           </button>
         </div>
@@ -1657,7 +1668,7 @@ const App = () => {
           <div className="flex items-center gap-3">
             {testRunning && <div className="flex items-center gap-2 text-[15px] text-black px-3 py-1 font-bold bg-wire-cyan animate-pulse tracking-wider"><FlaskConical className="w-3 h-3" /> TEST ENCODE</div>}
             {toolRunning && <div className="flex items-center gap-2 text-[15px] text-black px-3 py-1 font-bold bg-nerv animate-pulse tracking-wider"><Wrench className="w-3 h-3" /> {toolStatus.toolName?.toUpperCase()}</div>}
-            {statusActive && <div className="flex items-center gap-2 text-[15px] text-black px-3 py-1 font-bold bg-data-green animate-pulse tracking-wider">{status.status?.toUpperCase()}</div>}
+            {statusActive && !status?.testEncode && <div className="flex items-center gap-2 text-[15px] text-black px-3 py-1 font-bold bg-data-green animate-pulse tracking-wider">{status.status?.toUpperCase()}</div>}
           </div>
         </header>
         {activeTab === 'dashboard' && <Dashboard status={status} queue={queue} logs={logs} logRef={logRef} setLogs={setLogs} autoScroll={autoScroll} setAutoScroll={setAutoScroll} systemMetrics={systemMetrics} />}
@@ -1666,7 +1677,7 @@ const App = () => {
             {activeTab === 'queue' && <QueueSection queue={queue} />}
             {activeTab === 'encoders' && <EncodersSection encoders={encoders} buildEncoder={buildEncoder} buildLogs={buildLogs} />}
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
-            {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} />}
+            {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}
           </div>
         )}
       </main>
