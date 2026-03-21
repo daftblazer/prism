@@ -622,49 +622,135 @@ const QueueSection = ({ queue }) => {
   );
 };
 
-const EncoderCard = ({ enc, buildEncoder, buildLogs }) => {
-  const [branch, setBranch] = useState(enc.defaultBranch || 'main');
-  const [branchList, setBranchList] = useState([]);
-  const [loadingBranches, setLoadingBranches] = useState(true);
-
-  useEffect(() => {
-    setLoadingBranches(true);
-    axios.get(`/api/encoders/${enc.name}/branches`)
-      .then(res => { setBranchList(res.data.branches); setBranch(res.data.defaultBranch); })
-      .catch(() => setBranchList([enc.defaultBranch || 'main']))
-      .finally(() => setLoadingBranches(false));
-  }, [enc.name]);
-
-  return (
-    <div className="border border-sf overflow-hidden bg-void-panel">
-      <div className="p-6">
-        <div className="flex justify-between mb-4">
-          <div className="w-9 h-9 bg-nerv/10 flex items-center justify-center"><Cpu className="w-4 h-4 text-nerv" /></div>
-          {enc.isInstalled ? <CheckCircle2 className="w-5 h-5 text-data-green" /> : <AlertCircle className="w-5 h-5 text-nerv" />}
-        </div>
-        <h4 className="nerv-title text-nerv text-base mb-1">{enc.name}</h4>
-        <p className="text-[15px] font-bold mb-4 text-steel-dim uppercase tracking-wider">{enc.isInstalled ? 'Binary Ready' : 'Build Required'}</p>
-        <div className="space-y-1 mb-4">
-          <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Source Branch</label>
-          <select value={branch} onChange={e => setBranch(e.target.value)} disabled={loadingBranches} className="w-full border border-sf bg-void p-2.5 text-xs font-bold text-steel font-sys">
-            {loadingBranches ? <option>Loading...</option> : branchList.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-        </div>
-        <button onClick={() => buildEncoder(enc.name, branch)} className="w-full py-2.5 font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all text-black bg-nerv hover:bg-nerv-hot uppercase tracking-wider">
-          <RefreshCcw className="w-3.5 h-3.5" /> {enc.isInstalled ? 'REBUILD' : 'COMPILE NOW'}
-        </button>
-      </div>
-      {buildLogs[enc.name] && <div className="bg-void border-t border-sf h-44 p-4 overflow-auto font-sys text-[14px] text-data-green-dim">{buildLogs[enc.name].map((l,i) => <div key={i} className="mb-0.5">{l}</div>)}</div>}
-    </div>
-  );
+const ENCODER_DESCRIPTIONS = {
+  '5fish': { title: '5fish PSY', description: 'Community fork of SVT-AV1 with perceptual quality optimizations. Adds psychovisual tuning options for improved visual fidelity at lower bitrates, including custom tune modes and bias controls.', repo: 'github.com/5fish/svt-av1-psy' },
+  'tritium': { title: 'Tritium', description: 'Lightweight SVT-AV1 fork focused on speed and efficiency improvements. Targets faster encoding with minimal quality loss through optimized preset configurations and threading.', repo: 'github.com/Uranite/svt-av1-tritium' },
+  'essential': { title: 'Essential', description: 'SVT-AV1 fork with curated patches for essential quality-of-life improvements. Provides a stable, opinionated build with select enhancements from the PSY community.', repo: 'github.com/nekotrix/SVT-AV1-Essential' },
 };
 
 const EncodersSection = ({ encoders, buildEncoder, buildLogs }) => {
+  const [selectedEncoder, setSelectedEncoder] = useState(encoders[0]?.name || null);
+  const [branches, setBranches] = useState({});
+  const [selectedBranches, setSelectedBranches] = useState({});
+  const [loadingBranches, setLoadingBranches] = useState({});
+  const buildLogRef = useRef(null);
+
+  useEffect(() => {
+    encoders.forEach(enc => {
+      if (branches[enc.name]) return;
+      setLoadingBranches(prev => ({ ...prev, [enc.name]: true }));
+      axios.get(`/api/encoders/${enc.name}/branches`)
+        .then(res => {
+          setBranches(prev => ({ ...prev, [enc.name]: res.data.branches }));
+          setSelectedBranches(prev => ({ ...prev, [enc.name]: res.data.defaultBranch }));
+        })
+        .catch(() => {
+          setBranches(prev => ({ ...prev, [enc.name]: [enc.defaultBranch || 'main'] }));
+          setSelectedBranches(prev => ({ ...prev, [enc.name]: enc.defaultBranch || 'main' }));
+        })
+        .finally(() => setLoadingBranches(prev => ({ ...prev, [enc.name]: false })));
+    });
+  }, [encoders]);
+
+  // Auto-scroll build log
+  useEffect(() => {
+    if (buildLogRef.current) {
+      buildLogRef.current.scrollTop = buildLogRef.current.scrollHeight;
+    }
+  }, [buildLogs]);
+
+  const selectedEnc = encoders.find(e => e.name === selectedEncoder);
+  const info = ENCODER_DESCRIPTIONS[selectedEncoder] || { title: selectedEncoder, description: 'No description available.', repo: '' };
+
+  // Collect all build logs into a unified stream
+  const allBuildLogs = Object.entries(buildLogs).flatMap(([name, logs]) =>
+    logs.map(line => ({ name, line }))
+  );
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-      {encoders.map(enc => (
-        <EncoderCard key={enc.name} enc={enc} buildEncoder={buildEncoder} buildLogs={buildLogs} />
-      ))}
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(280px, 1fr) minmax(0, 2fr)',
+      gridTemplateRows: 'auto 1fr',
+      gridTemplateAreas: `"list info" "list terminal"`,
+      flex: '1 1 0%',
+      minHeight: 0,
+      gap: '12px',
+      padding: '16px',
+    }}>
+      {/* Left column: encoder list */}
+      <div style={{ gridArea: 'list' }} className="flex flex-col gap-2 min-h-0 overflow-auto">
+        {encoders.map(enc => {
+          const isSelected = enc.name === selectedEncoder;
+          const encBranch = selectedBranches[enc.name] || enc.defaultBranch || 'main';
+          const encBranches = branches[enc.name] || [];
+          const isLoading = loadingBranches[enc.name];
+          return (
+            <div key={enc.name} onClick={() => setSelectedEncoder(enc.name)} className={cn("border bg-void-panel cursor-pointer transition-all", isSelected ? "border-nerv" : "border-sf hover:border-steel-dim")}>
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-nerv/10 flex items-center justify-center"><Cpu className="w-3.5 h-3.5 text-nerv" /></div>
+                    <div>
+                      <h4 className="nerv-title text-nerv text-sm">{enc.name}</h4>
+                      <p className="text-[11px] font-bold text-steel-dim uppercase tracking-wider">{enc.isInstalled ? 'Binary Ready' : 'Build Required'}</p>
+                    </div>
+                  </div>
+                  {enc.isInstalled ? <CheckCircle2 className="w-4 h-4 text-data-green" /> : <AlertCircle className="w-4 h-4 text-nerv" />}
+                </div>
+                <div className="flex gap-2">
+                  <select value={encBranch} onChange={e => { e.stopPropagation(); setSelectedBranches(prev => ({ ...prev, [enc.name]: e.target.value })); }} onClick={e => e.stopPropagation()} disabled={isLoading} className="flex-1 border border-sf bg-void px-2 py-1.5 text-[11px] font-bold text-steel font-sys min-w-0">
+                    {isLoading ? <option>Loading...</option> : encBranches.map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                  <button onClick={e => { e.stopPropagation(); buildEncoder(enc.name, encBranch); }} className="px-3 py-1.5 font-bold text-[11px] flex items-center gap-1.5 active:scale-95 transition-all text-black bg-nerv hover:bg-nerv-hot uppercase tracking-wider shrink-0">
+                    <RefreshCcw className="w-3 h-3" /> {enc.isInstalled ? 'Rebuild' : 'Build'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Top-right: encoder description */}
+      <div style={{ gridArea: 'info' }} className="border border-sf bg-void-panel min-h-0 flex flex-col">
+        <div className="panel-header">
+          <div className="flex items-center gap-2"><Cpu className="w-3.5 h-3.5 text-nerv" /><span>{info.title}</span></div>
+          {selectedEnc && (
+            <span className={cn("text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 border", selectedEnc.isInstalled ? "border-data-green/30 text-data-green bg-data-green/5" : "border-nerv/30 text-nerv bg-nerv/5")}>
+              {selectedEnc.isInstalled ? 'Installed' : 'Not Installed'}
+            </span>
+          )}
+        </div>
+        <div className="flex-1 p-5 overflow-auto">
+          <p className="text-sm text-steel leading-relaxed mb-4">{info.description}</p>
+          {info.repo && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-nerv">Source</span>
+              <span className="text-[12px] font-bold text-steel-dim font-sys">{info.repo}</span>
+            </div>
+          )}
+          {selectedEnc && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-nerv">Binary</span>
+              <span className="text-[12px] font-bold text-steel-dim font-sys truncate">{selectedEnc.path}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom-right: unified build terminal */}
+      <div style={{ gridArea: 'terminal' }} className="panel overflow-hidden flex flex-col min-h-0">
+        <div className="panel-header">
+          <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-nerv" /><span>Build Output</span></div>
+        </div>
+        <div ref={buildLogRef} className="flex-1 p-4 overflow-auto font-sys text-[13px] leading-relaxed text-data-green-dim min-h-0">
+          {allBuildLogs.length === 0 && <p className="text-steel-dim/50 italic uppercase tracking-widest text-[12px]">[PRISM] Awaiting build commands...</p>}
+          {allBuildLogs.map((entry, i) => (
+            <div key={i} className="mb-0.5 whitespace-pre-wrap"><span className="text-nerv">[{entry.name}]</span> {entry.line}</div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
@@ -1734,10 +1820,10 @@ const App = () => {
           </div>
         </header>
         {activeTab === 'dashboard' && <Dashboard status={status} queue={queue} logs={logs} logRef={logRef} setLogs={setLogs} autoScroll={autoScroll} setAutoScroll={setAutoScroll} systemMetrics={systemMetrics} />}
-        {activeTab !== 'dashboard' && (
+        {activeTab === 'encoders' && <EncodersSection encoders={encoders} buildEncoder={buildEncoder} buildLogs={buildLogs} />}
+        {activeTab !== 'dashboard' && activeTab !== 'encoders' && (
           <div className="flex-1 overflow-auto p-6 max-w-[1800px] mx-auto w-full">
             {activeTab === 'queue' && <QueueSection queue={queue} />}
-            {activeTab === 'encoders' && <EncodersSection encoders={encoders} buildEncoder={buildEncoder} buildLogs={buildLogs} />}
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
             {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}
             {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} />}
