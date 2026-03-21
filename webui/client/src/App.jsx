@@ -1401,8 +1401,10 @@ const TestEncodeHelp = () => {
 
 const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
   const [selectedFile, setSelectedFile] = useState('');
-  const [formData, setFormData] = useState({ encoder: encoders[0]?.path || '', crf: '18', preset: '4', tune: '0', duration: '60', startTime: '', screenshotCount: '6' });
-  const [variants, setVariants] = useState([{ label: 'variant-a', flags: '' }, { label: 'variant-b', flags: '' }]);
+  const defaultEncoder = encoders[0]?.path || '';
+  const [formData, setFormData] = useState({ duration: '60', startTime: '', screenshotCount: '6' });
+  const makeVariant = (label) => ({ label, encoder: defaultEncoder, crf: '18', preset: '4', tune: '0', flags: '' });
+  const [variants, setVariants] = useState([makeVariant('variant-a'), makeVariant('variant-b')]);
   const [browsePath, setBrowsePath] = useState('/');
   const [browseItems, setBrowseItems] = useState([]);
   const [browseLoading, setBrowseLoading] = useState(false);
@@ -1410,9 +1412,18 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
   useEffect(() => { browse(browsePath); }, [browsePath]);
   const browse = async (p) => { setBrowseLoading(true); try { const res = await axios.get(`/api/browse?path=${encodeURIComponent(p)}`); setBrowseItems(res.data); } catch (e) { console.error(e); } finally { setBrowseLoading(false); } };
 
-  const addVariant = () => setVariants([...variants, { label: `variant-${String.fromCharCode(97 + variants.length)}`, flags: '' }]);
+  const addVariant = () => {
+    const prev = variants[variants.length - 1];
+    const label = `variant-${String.fromCharCode(97 + variants.length)}`;
+    setVariants([...variants, { ...prev, label }]);
+  };
   const removeVariant = (i) => { if (variants.length <= 1) return; setVariants(variants.filter((_, idx) => idx !== i)); };
   const updateVariant = (i, field, value) => { const v = [...variants]; v[i] = { ...v[i], [field]: value }; setVariants(v); };
+  const duplicateVariant = (i) => {
+    const src = variants[i];
+    const label = `${src.label}-copy`;
+    setVariants([...variants.slice(0, i + 1), { ...src, label }, ...variants.slice(i + 1)]);
+  };
 
   const handleSubmit = async () => {
     if (!selectedFile) return alert('Select a source video file first!');
@@ -1422,20 +1433,17 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
     try {
       await axios.post('/api/test-encode', {
         sourceFile: selectedFile,
-        encoder: formData.encoder,
-        crf: formData.crf,
-        preset: formData.preset,
-        tune: formData.tune,
         duration: formData.duration,
         startTime: formData.startTime || undefined,
         screenshotCount: formData.screenshotCount,
-        variants: variants.map(v => ({ label: v.label.trim(), flags: v.flags })),
+        variants: variants.map(v => ({ label: v.label.trim(), encoder: v.encoder, crf: v.crf, preset: v.preset, tune: v.tune, flags: v.flags })),
       });
       onClose();
     } catch (e) { alert(e.response?.data?.error || e.message); }
   };
 
   const inputCls = "w-full border border-sf bg-void p-3 text-xs font-bold text-steel font-sys";
+  const compactInput = "w-full border border-sf bg-void-panel p-2 text-xs font-bold text-steel font-sys";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90">
@@ -1466,17 +1474,9 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
               <label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Selected File</label>
               <input type="text" value={selectedFile} readOnly placeholder="Select a video file from browser..." className={cn(inputCls, "opacity-70")} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Encoder</label><select value={formData.encoder} onChange={e => setFormData({...formData, encoder: e.target.value})} className={inputCls}>{encoders.map(e => <option key={e.path} value={e.path}>{e.name}</option>)}</select></div>
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">CRF</label><input type="number" value={formData.crf} onChange={e => setFormData({...formData, crf: e.target.value})} className={inputCls} /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Preset</label><input type="number" value={formData.preset} onChange={e => setFormData({...formData, preset: e.target.value})} className={inputCls} /></div>
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Tune</label><input type="number" value={formData.tune} onChange={e => setFormData({...formData, tune: e.target.value})} className={inputCls} /></div>
-            </div>
             <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Sample Duration (s)</label><input type="number" value={formData.duration} onChange={e => setFormData({...formData, duration: e.target.value})} className={inputCls} /></div>
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Start Time (s)</label><input type="number" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} placeholder="Auto" className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Duration (s)</label><input type="number" value={formData.duration} onChange={e => setFormData({...formData, duration: e.target.value})} className={inputCls} /></div>
+              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Start Time</label><input type="text" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} placeholder="Auto" className={inputCls} /></div>
               <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Screenshots</label><input type="number" value={formData.screenshotCount} onChange={e => setFormData({...formData, screenshotCount: e.target.value})} className={inputCls} /></div>
             </div>
 
@@ -1486,12 +1486,34 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
                 <button onClick={addVariant} className="flex items-center gap-1.5 px-2.5 py-1 text-[14px] font-bold uppercase bg-void border border-sf text-steel hover:text-wire-cyan hover:border-wire-cyan-dim/30 transition-all"><Plus className="w-2.5 h-2.5" /> Add</button>
               </div>
               {variants.map((v, i) => (
-                <div key={i} className="border border-sf p-3 space-y-2 bg-void">
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={v.label} onChange={e => updateVariant(i, 'label', e.target.value)} placeholder="Label" className="flex-1 border border-sf bg-void-panel p-2.5 text-xs font-bold text-steel font-sys" />
-                    {variants.length > 1 && <button onClick={() => removeVariant(i)} className="p-1.5 text-steel-dim hover:text-alert-red transition-all"><Trash2 className="w-3.5 h-3.5" /></button>}
+                <div key={i} className="border border-sf bg-void">
+                  <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+                    <input type="text" value={v.label} onChange={e => updateVariant(i, 'label', e.target.value)} placeholder="Label" className="flex-1 border border-sf bg-void-panel p-2 text-xs font-bold text-steel font-sys" />
+                    <button onClick={() => duplicateVariant(i)} title="Duplicate variant" className="p-1.5 text-steel-dim hover:text-wire-cyan transition-all"><Plus className="w-3.5 h-3.5" /></button>
+                    {variants.length > 1 && <button onClick={() => removeVariant(i)} title="Remove variant" className="p-1.5 text-steel-dim hover:text-alert-red transition-all"><Trash2 className="w-3.5 h-3.5" /></button>}
                   </div>
-                  <input type="text" value={v.flags} onChange={e => updateVariant(i, 'flags', e.target.value)} placeholder="Custom encoder flags, e.g. --film-grain 4" className="w-full border border-sf bg-void-panel p-2.5 text-xs font-bold font-sys text-steel" />
+                  <div className="grid grid-cols-4 gap-2 px-3 pb-2">
+                    <div>
+                      <span className="text-[10px] font-bold text-steel-dim uppercase block mb-1">Encoder</span>
+                      <select value={v.encoder} onChange={e => updateVariant(i, 'encoder', e.target.value)} className={compactInput}>{encoders.map(e => <option key={e.path} value={e.path}>{e.name}</option>)}</select>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-steel-dim uppercase block mb-1">CRF</span>
+                      <input type="number" value={v.crf} onChange={e => updateVariant(i, 'crf', e.target.value)} className={compactInput} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-steel-dim uppercase block mb-1">Preset</span>
+                      <input type="number" value={v.preset} onChange={e => updateVariant(i, 'preset', e.target.value)} className={compactInput} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-steel-dim uppercase block mb-1">Tune</span>
+                      <input type="number" value={v.tune} onChange={e => updateVariant(i, 'tune', e.target.value)} className={compactInput} />
+                    </div>
+                  </div>
+                  <div className="px-3 pb-3">
+                    <span className="text-[10px] font-bold text-steel-dim uppercase block mb-1">Custom Flags</span>
+                    <input type="text" value={v.flags} onChange={e => updateVariant(i, 'flags', e.target.value)} placeholder="e.g. --film-grain 4" className={compactInput} />
+                  </div>
                 </div>
               ))}
             </div>

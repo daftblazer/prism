@@ -749,8 +749,8 @@ app.post('/api/test-encode', async (req, res) => {
   if (testEncodeRunning) return res.status(400).json({ error: 'A test encode is already running' });
   if (worker.processing) return res.status(400).json({ error: 'A batch encode is running — wait for it to finish' });
 
-  const { sourceFile, encoder, crf, preset, tune, duration, startTime, screenshotCount, variants } = req.body;
-  if (!sourceFile || !encoder) return res.status(400).json({ error: 'sourceFile and encoder are required' });
+  const { sourceFile, encoder: globalEncoder, crf: globalCrf, preset: globalPreset, tune: globalTune, duration, startTime, screenshotCount, variants } = req.body;
+  if (!sourceFile) return res.status(400).json({ error: 'sourceFile is required' });
   if (!variants || variants.length < 1) return res.status(400).json({ error: 'At least 1 variant required' });
   const labels = variants.map(v => v.label.trim());
   if (labels.some(l => !l)) return res.status(400).json({ error: 'All variants need a label' });
@@ -860,13 +860,18 @@ app.post('/api/test-encode', async (req, res) => {
         emit({ running: true, phase: 'encoding', phaseLabel: `Encoding variant: ${variant.label}`, progress: 0, variantIndex: vi + 1, totalVariants: variants.length, variantLabel: variant.label, testDir });
 
         await new Promise((resolve, reject) => {
+          const vEncoder = variant.encoder || globalEncoder;
+          const vCrf = variant.crf ?? globalCrf ?? 18;
+          const vPreset = variant.preset ?? globalPreset ?? 4;
+          const vTune = variant.tune ?? globalTune ?? 0;
+          if (!vEncoder) { reject(new Error(`No encoder specified for variant "${variant.label}"`)); return; }
           const args = [
             '--input', samplePath,
             '--output-dir', variantDir,
-            '--encoder', encoder,
-            '--crf', String(crf || 18),
-            '--preset', String(preset || 4),
-            '--tune', String(tune || 0),
+            '--encoder', vEncoder,
+            '--crf', String(vCrf),
+            '--preset', String(vPreset),
+            '--tune', String(vTune),
             '--custom-flags', variant.flags || '',
             '--auto-crop', '0',
             '--rename-audio', '0',
