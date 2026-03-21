@@ -7,6 +7,7 @@ A batch AV1 video encoding system with a NERV-inspired web dashboard for managin
 ## Features
 
 - **Batch encoding** — Queue entire folders of video files for AV1 encoding with real-time telemetry
+- **Parallel encoding** — Run multiple encode instances simultaneously with CCD-aware CPU pinning via `taskset`, configurable reserved cores, and per-instance `--lp` thread control
 - **Multiple encoder support** — Build and switch between SVT-AV1 forks (5fish PSY, Tritium, Essential) from source, with branch selection
 - **Smart audio handling** — Lossless audio is transcoded to Opus; lossy formats are copied as-is with language tags and titles preserved
 - **Auto-crop detection** — Automatically detects and removes black bars
@@ -47,7 +48,7 @@ Then open `http://<host>:3000`.
 
 The main operations view with a 3x2 grid layout:
 
-- **Encode panel** — Current file name, progress bar, pause/resume/stop controls
+- **Encode panel** — Current file name, progress bar, pause/resume/stop controls. Multi-instance mode shows per-instance cards with individual progress and FPS
 - **Encoding statistics** — Live frames, speed, bitrate, size, elapsed, remaining, and crop data organized into Operation, Performance, and Timing sections
 - **System metrics** — Per-core CPU bars (green/orange/red based on load), segmented memory bar, load averages, and uptime
 - **Terminal log** — NERV-styled telemetry feed with color-coded output (green for encode data, cyan for initialization, red for errors) and auto-scroll
@@ -83,6 +84,16 @@ Run test encodes with different CRF/preset/tune combinations on a sample, then c
 
 Toggle CRT effects and light mode. Configure release group name for output tagging.
 
+**Encoding settings:**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Parallel Instances | 1 | Number of simultaneous encode processes (1-8) |
+| Reserved Cores | 0 | Cores reserved for host OS, starting from core 0. Each reserved core removes both its physical thread and hyperthread |
+| Threads per CCD | 0 | Enables CCD-aware thread allocation for AMD CPUs (e.g. 16 for an 8-core CCD with SMT). Set to 0 to use simple contiguous splitting |
+
+A live thread allocation preview shows the computed CPU assignments for each instance. When `taskset` is available, each encode process is pinned to its assigned cores and given a matching `--lp` thread count.
+
 ## Supported Encoders
 
 Encoders are compiled from source inside the container via build scripts:
@@ -105,6 +116,7 @@ Encoders are built and stored in `/config/encoders/<name>/` and can be compiled 
 | Custom Flags | — | Extra encoder flags (e.g. `--lineart-psy-bias 3`) |
 | Output Subfolder | — | Optional subdirectory under `/output` |
 | Auto-Crop | off | Detect and remove black bars automatically |
+| Parallel Instances | 1 | Run N files simultaneously with CPU pinning |
 
 ## Audio Processing
 
