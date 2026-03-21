@@ -52,7 +52,7 @@ async function saveSettings(settings) {
   try { await fs.ensureDir(CONFIG_DIR); await fs.writeJson(SETTINGS_FILE, settings); } catch (err) { console.error('Settings save error:', err); }
 }
 
-const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
 
 function probeVideo(filePath) {
   return new Promise((resolve) => {
@@ -214,7 +214,7 @@ function emitFormattedLog(msg, type = 'info') {
   const raw = stripAnsi(msg).trim();
   if (!raw) return;
   const ts = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
-  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 1);
   for (const line of lines) {
     const entry = formatLogLine(line, type, ts);
     if (entry) { console.log(entry.text); io.emit('logs', entry); }
