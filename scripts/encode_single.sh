@@ -373,7 +373,11 @@ if [[ -n "$VIDEO_FILTER" ]]; then
 fi
 SETTINGS_PARTS+=("color: primaries=${COLOR_PRIMARIES} transfer=${TRANSFER_CHARS} matrix=${MATRIX_COEFFS} range=${COLOR_RANGE}")
 
-ENCODING_SETTINGS="$(IFS=' | '; echo "${SETTINGS_PARTS[*]}")"
+ENCODING_SETTINGS=""
+for i in "${!SETTINGS_PARTS[@]}"; do
+  [[ $i -gt 0 ]] && ENCODING_SETTINGS+=" | "
+  ENCODING_SETTINGS+="${SETTINGS_PARTS[$i]}"
+done
 
 cat > "$TMP_TAGS" <<XMLEOF
 <?xml version="1.0" encoding="UTF-8"?>
