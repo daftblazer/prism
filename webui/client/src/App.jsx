@@ -15,35 +15,59 @@ const socket = io();
 
 // --- Helper Components ---
 
-const SettingsPanel = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled, lightMode, setLightMode }) => {
+const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled, lightMode, setLightMode }) => {
   const [releaseGroup, setReleaseGroup] = useState(appSettings?.releaseGroup || '');
   useEffect(() => { setReleaseGroup(appSettings?.releaseGroup || ''); }, [appSettings?.releaseGroup]);
   const handleReleaseGroupSave = () => { saveAppSettings({ releaseGroup }); };
+  const rowCls = "flex items-center justify-between py-4 border-b border-sf";
+  const labelCls = "text-[14px] font-bold uppercase tracking-widest text-nerv";
+  const toggleBase = "px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border";
+  const toggleOff = "border-sf bg-void text-steel-dim";
   return (
-    <div className="absolute bottom-full left-0 w-full mb-2 p-4 border border-sf bg-void-panel shadow-2xl z-50 space-y-4">
+    <div className="space-y-8">
       <div>
-        <span className="text-[14px] font-bold uppercase tracking-widest text-nerv">Release Group</span>
-        <div className="flex gap-2 mt-2">
-          <input type="text" value={releaseGroup} onChange={e => setReleaseGroup(e.target.value)} onBlur={handleReleaseGroupSave} onKeyDown={e => e.key === 'Enter' && handleReleaseGroupSave()} placeholder="e.g. ED3N, Judas" className="flex-1 border border-sf bg-void px-3 py-1.5 text-xs font-bold text-steel font-sys" />
+        <h3 className="nerv-title text-nerv text-sm mb-4">General</h3>
+        <div className="border border-sf bg-void-panel">
+          <div className={cn(rowCls, "px-4")}>
+            <div>
+              <span className={labelCls}>Release Group</span>
+              <p className="text-[11px] text-steel-dim mt-0.5">Tag used in file naming and track titles</p>
+            </div>
+            <input type="text" value={releaseGroup} onChange={e => setReleaseGroup(e.target.value)} onBlur={handleReleaseGroupSave} onKeyDown={e => e.key === 'Enter' && handleReleaseGroupSave()} placeholder="e.g. ED3N, Judas" className="w-48 border border-sf bg-void px-3 py-1.5 text-xs font-bold text-steel font-sys text-right" />
+          </div>
+          <div className={cn(rowCls, "px-4")}>
+            <div>
+              <span className={labelCls}>CRT Effects</span>
+              <p className="text-[11px] text-steel-dim mt-0.5">Scanline and phosphor glow overlay</p>
+            </div>
+            <button onClick={() => setCrtEnabled(!crtEnabled)} className={cn(toggleBase, crtEnabled ? "border-data-green/30 bg-data-green/10 text-data-green" : toggleOff)}>
+              {crtEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+          <div className={cn(rowCls, "px-4 border-b-0")}>
+            <div>
+              <span className={labelCls}>Light Mode</span>
+              <p className="text-[11px] text-steel-dim mt-0.5">Switch to light color scheme</p>
+            </div>
+            <button onClick={() => setLightMode(!lightMode)} className={cn(toggleBase, lightMode ? "border-nerv/30 bg-nerv/10 text-nerv" : toggleOff)}>
+              {lightMode ? 'On' : 'Off'}
+            </button>
+          </div>
         </div>
       </div>
-      <div className="flex items-center justify-between">
-        <span className="text-[14px] font-bold uppercase tracking-widest text-nerv">CRT Effects</span>
-        <button onClick={() => setCrtEnabled(!crtEnabled)} className={cn("px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border", crtEnabled ? "border-data-green/30 bg-data-green/10 text-data-green" : "border-sf bg-void text-steel-dim")}>
-          {crtEnabled ? 'On' : 'Off'}
-        </button>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-[14px] font-bold uppercase tracking-widest text-nerv">Light Mode</span>
-        <button onClick={() => setLightMode(!lightMode)} className={cn("px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border", lightMode ? "border-nerv/30 bg-nerv/10 text-nerv" : "border-sf bg-void text-steel-dim")}>
-          {lightMode ? 'On' : 'Off'}
-        </button>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-[14px] font-bold uppercase tracking-widest text-nerv">Work Dirs</span>
-        <button onClick={async () => { try { const { data } = await axios.delete('/api/cleanup/work-dirs'); alert(`Removed ${data.removed} leftover work director${data.removed === 1 ? 'y' : 'ies'}`); } catch (e) { alert(e.response?.data?.error || e.message); } }} className="px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border border-sf bg-void text-steel-dim hover:border-alert-red/30 hover:bg-alert-red/10 hover:text-alert-red">
-          Clean Up
-        </button>
+      <div>
+        <h3 className="nerv-title text-nerv text-sm mb-4">Maintenance</h3>
+        <div className="border border-sf bg-void-panel">
+          <div className={cn(rowCls, "px-4 border-b-0")}>
+            <div>
+              <span className={labelCls}>Clean Work Directories</span>
+              <p className="text-[11px] text-steel-dim mt-0.5">Remove leftover .work- folders from failed or interrupted encodes</p>
+            </div>
+            <button onClick={async () => { try { const { data } = await axios.delete('/api/cleanup/work-dirs'); alert(`Removed ${data.removed} leftover work director${data.removed === 1 ? 'y' : 'ies'}`); } catch (e) { alert(e.response?.data?.error || e.message); } }} className="px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border border-sf bg-void text-steel-dim hover:border-alert-red/30 hover:bg-alert-red/10 hover:text-alert-red">
+              Clean Up
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1563,7 +1587,6 @@ const App = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const logRef = useRef(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [toolLogs, setToolLogs] = useState([]);
   const [toolStatus, setToolStatus] = useState(null);
   const [appSettings, setAppSettings] = useState({});
@@ -1688,14 +1711,9 @@ const App = () => {
           <NavItem icon={<Cpu className="w-3.5 h-3.5" />} label="Encoders" active={activeTab === 'encoders'} onClick={() => setActiveTab('encoders')} />
           <NavItem icon={<Wrench className="w-3.5 h-3.5" />} label="Tools" active={activeTab === 'tools'} onClick={() => setActiveTab('tools')} />
           <NavItem icon={<FlaskConical className="w-3.5 h-3.5" />} label="Compare" active={activeTab === 'compare'} onClick={() => setActiveTab('compare')} />
+          <NavItem icon={<Settings className="w-3.5 h-3.5" />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
         </nav>
         <div className="p-3 space-y-2 border-t border-sf">
-          <div className="relative">
-            <button onClick={() => setSettingsOpen(!settingsOpen)} className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold transition-all", settingsOpen ? "text-nerv bg-nerv/10" : "text-steel-dim hover:text-nerv")}>
-              <Settings className="w-3.5 h-3.5" /> SETTINGS
-            </button>
-            {settingsOpen && <SettingsPanel appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} />}
-          </div>
           <button onClick={() => setIsModalOpen(true)} disabled={testRunning} className={cn("w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs transition-all active:scale-95 tracking-wider uppercase", testRunning ? "bg-steel-dim/30 text-steel-dim cursor-not-allowed" : "bg-nerv text-black hover:bg-nerv-hot")}>
             <Plus className="w-3.5 h-3.5" />Add Batch
           </button>
@@ -1722,6 +1740,7 @@ const App = () => {
             {activeTab === 'encoders' && <EncodersSection encoders={encoders} buildEncoder={buildEncoder} buildLogs={buildLogs} />}
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
             {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}
+            {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} />}
           </div>
         )}
       </main>
