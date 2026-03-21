@@ -670,8 +670,8 @@ const EncodersSection = ({ encoders, buildEncoder, buildLogs }) => {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(280px, 1fr) minmax(0, 2fr)',
-      gridTemplateRows: 'auto 1fr',
+      gridTemplateColumns: '1fr 1fr',
+      gridTemplateRows: '1fr 1fr',
       gridTemplateAreas: `"list info" "list terminal"`,
       flex: '1 1 0%',
       minHeight: 0,
