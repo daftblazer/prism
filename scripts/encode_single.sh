@@ -357,7 +357,8 @@ for plan in "${AUDIO_PLAN_ARR[@]}"; do
 done
 
 # 4) Build encoding settings tag
-ENCODER_VERSION="$("$ENCODER" 2>&1 | head -1 || echo "unknown")"
+ENCODER_VERSION="$("$ENCODER" 2>&1 | sed -n 's/.*SVT \[version\]:\s*//p' || echo "unknown")"
+[[ -z "$ENCODER_VERSION" ]] && ENCODER_VERSION="unknown"
 ENCODER_NAME="$(basename "$(dirname "$(dirname "$ENCODER")")")"
 
 SETTINGS_PARTS=()

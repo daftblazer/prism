@@ -101,6 +101,8 @@ if tags.get('title'):
     print(f"  Title                          : {tags['title']}")
 if tags.get('ENCODER') or tags.get('encoder'):
     print(f"  Writing application            : {tags.get('ENCODER', tags.get('encoder', ''))}")
+if tags.get('ENCODING_SETTINGS'):
+    print(f"  Encoding settings              : {tags['ENCODING_SETTINGS']}")
 
 for idx in sorted(streams):
     s = streams[idx]
