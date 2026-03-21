@@ -152,6 +152,75 @@ function parseEncodeOutput(clean, totalFrames, cropInfo) {
   return result;
 }
 
+function formatLogLine(line, type, ts) {
+  // Skip separator lines and empty SVT noise
+  if (/^-{3,}$/.test(line) || /^Svt\[info\]:\s*-{3,}/.test(line) || /^Svt\[info\]:\s*$/.test(line)) return null;
+
+  // Encoding progress telemetry
+  const encMatch = line.match(/(?:Encoding:\s*)?(\d+)(?:\s*\/\s*(\d+))?\s+Frames?\s*@\s*([\d.]+)\s*fp[sm]\s*\|\s*([\d.]+)\s*kb\/s\s*\|\s*Size:\s*([\d.]+)\s*MB(?:\s*\[([\d.]+)\s*MB\])?\s*\|\s*Time:\s*([\d:]+)(?:\s*\[-([\d:]+)\])?/);
+  if (encMatch) {
+    const [, frame, total, fps, bitrate, size, estSize, elapsed, eta] = encMatch;
+    const frameStr = total ? `${frame} / ${total}` : frame;
+    const sizeStr = estSize ? `${size} / ~${estSize} MB` : `${size} MB`;
+    const text = [
+      `[PRISM] ${ts} ── ENCODE TELEMETRY ──`,
+      `        FRAME: ${frameStr.padEnd(16)} SPEED: ${fps} fps`,
+      `        RATE:  ${(bitrate + ' kb/s').padEnd(16)} SIZE:  ${sizeStr}`,
+      `        TIME:  ${elapsed.padEnd(16)}${eta ? ' ETA:   ' + eta : ''}`,
+    ].join('\n');
+    return { type: 'encode', text };
+  }
+
+  // Input/output path lines
+  const inputM = line.match(/🎬\s*Input\s*:\s*(.+)/);
+  if (inputM) return { type: 'init', text: `[PRISM] ${ts} ── FILE ROUTING ──\n        INPUT:  ${inputM[1]}` };
+  const outputM = line.match(/(?:➡️\s*)?Output\s*:\s*(.+)/);
+  if (outputM) return { type: 'init_append', text: `        OUTPUT: ${outputM[1]}` };
+
+  // Source metadata lines
+  const srcFpsM = line.match(/==>\s*Source FPS:\s*(.+)/);
+  if (srcFpsM) return { type: 'init', text: `[PRISM] ${ts} ── SOURCE ANALYSIS ──\n        FPS: ${srcFpsM[1]}` };
+  const colorM = line.match(/==>\s*Color:\s*primaries=(\S+)\s+transfer=(\S+)\s+matrix=(\S+)\s+range=(\S+)/);
+  if (colorM) {
+    const rangeStr = colorM[4] === '0' ? 'Limited' : colorM[4] === '1' ? 'Full' : colorM[4];
+    return { type: 'init_append', text: `        PRIMARIES: ${colorM[1].padEnd(12)} TRANSFER: ${colorM[2]}\n        MATRIX:    ${colorM[3].padEnd(12)} RANGE:    ${rangeStr}` };
+  }
+  if (/==>\s*Detecting color/.test(line)) return null;
+
+  // Encoding start line
+  const encStartM = line.match(/==>\s*Encoding video\s*\((.+?)\)/);
+  if (encStartM) return { type: 'init', text: `[PRISM] ${ts} ── ENCODER ENGAGED ──\n        CONFIG: ${encStartM[1]}` };
+
+  // SVT version/build/config lines
+  const svtVerM = line.match(/SVT \[version\]:\s*(.+)/);
+  if (svtVerM) return { type: 'init_append', text: `        ENGINE: ${svtVerM[1]}` };
+  const svtBuildM = line.match(/SVT \[build\]\s*:\s*(.+)/);
+  if (svtBuildM) return { type: 'init_append', text: `        BUILD:  ${svtBuildM[1]}` };
+  const svtCfgM = line.match(/SVT \[config\]:\s*(.+?)\s{2,}:\s*(.+)/);
+  if (svtCfgM) {
+    const key = svtCfgM[1].trim().toUpperCase().replace(/\s*\/\s*/g, ' / ');
+    const val = svtCfgM[2].trim();
+    return { type: 'init_append', text: `        ${key.padEnd(50)} ${val}` };
+  }
+  if (/^Svt\[info\]:/.test(line)) return null;
+  if (/^Encoding$/.test(line)) return null;
+
+  // Default formatting
+  const TAG = type === 'error' ? 'ERR!' : type === 'stderr' ? 'WARN' : 'SYS ';
+  return { type, text: `[PRISM] ${ts} [${TAG}] ${line}` };
+}
+
+function emitFormattedLog(msg, type = 'info') {
+  const raw = stripAnsi(msg).trim();
+  if (!raw) return;
+  const ts = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    const entry = formatLogLine(line, type, ts);
+    if (entry) { console.log(entry.text); io.emit('logs', entry); }
+  }
+}
+
 class Worker {
   constructor() { this.processing = false; this.stopping = false; }
   async start() { if (this.processing) return; this.stopping = false; this.processing = true; this.processNext(); }
@@ -300,111 +369,7 @@ class Worker {
     });
   }
 
-  log(msg, type = 'info') {
-    const raw = stripAnsi(msg).trim();
-    if (!raw) return;
-    const ts = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
-
-    // Split multi-line chunks and process each line
-    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      this._logLine(line, type, ts);
-    }
-  }
-
-  _logLine(line, type, ts) {
-    // Skip separator lines and empty SVT noise
-    if (/^-{3,}$/.test(line) || /^Svt\[info\]:\s*-{3,}/.test(line) || /^Svt\[info\]:\s*$/.test(line)) return;
-
-    // Encoding progress telemetry — update in place
-    const encMatch = line.match(/(?:Encoding:\s*)?(\d+)(?:\s*\/\s*(\d+))?\s+Frames?\s*@\s*([\d.]+)\s*fp[sm]\s*\|\s*([\d.]+)\s*kb\/s\s*\|\s*Size:\s*([\d.]+)\s*MB(?:\s*\[([\d.]+)\s*MB\])?\s*\|\s*Time:\s*([\d:]+)(?:\s*\[-([\d:]+)\])?/);
-    if (encMatch) {
-      const [, frame, total, fps, bitrate, size, estSize, elapsed, eta] = encMatch;
-      const frameStr = total ? `${frame} / ${total}` : frame;
-      const sizeStr = estSize ? `${size} / ~${estSize} MB` : `${size} MB`;
-      const out = [
-        `[PRISM] ${ts} ── ENCODE TELEMETRY ──`,
-        `        FRAME: ${frameStr.padEnd(16)} SPEED: ${fps} fps`,
-        `        RATE:  ${(bitrate + ' kb/s').padEnd(16)} SIZE:  ${sizeStr}`,
-        `        TIME:  ${elapsed.padEnd(16)}${eta ? ' ETA:   ' + eta : ''}`,
-      ].join('\n');
-      console.log(out); io.emit('logs', { type: 'encode', text: out });
-      return;
-    }
-
-    // Input/output path lines
-    const inputM = line.match(/🎬\s*Input\s*:\s*(.+)/);
-    if (inputM) {
-      const entry = `[PRISM] ${ts} ── FILE ROUTING ──\n        INPUT:  ${inputM[1]}`;
-      console.log(entry); io.emit('logs', { type: 'init', text: entry });
-      return;
-    }
-    const outputM = line.match(/(?:➡️\s*)?Output\s*:\s*(.+)/);
-    if (outputM) {
-      const entry = `        OUTPUT: ${outputM[1]}`;
-      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
-      return;
-    }
-
-    // Source metadata lines (==> ...)
-    const srcFpsM = line.match(/==>\s*Source FPS:\s*(.+)/);
-    if (srcFpsM) {
-      const entry = `[PRISM] ${ts} ── SOURCE ANALYSIS ──\n        FPS: ${srcFpsM[1]}`;
-      console.log(entry); io.emit('logs', { type: 'init', text: entry });
-      return;
-    }
-    const colorM = line.match(/==>\s*Color:\s*primaries=(\S+)\s+transfer=(\S+)\s+matrix=(\S+)\s+range=(\S+)/);
-    if (colorM) {
-      const rangeStr = colorM[4] === '0' ? 'Limited' : colorM[4] === '1' ? 'Full' : colorM[4];
-      const entry = `        PRIMARIES: ${colorM[1].padEnd(12)} TRANSFER: ${colorM[2]}\n        MATRIX:    ${colorM[3].padEnd(12)} RANGE:    ${rangeStr}`;
-      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
-      return;
-    }
-    if (/==>\s*Detecting color/.test(line)) return; // suppress, color data follows
-
-    // Encoding start line (==> Encoding video ...)
-    const encStartM = line.match(/==>\s*Encoding video\s*\((.+?)\)/);
-    if (encStartM) {
-      const entry = `[PRISM] ${ts} ── ENCODER ENGAGED ──\n        CONFIG: ${encStartM[1]}`;
-      console.log(entry); io.emit('logs', { type: 'init', text: entry });
-      return;
-    }
-
-    // SVT version line
-    const svtVerM = line.match(/SVT \[version\]:\s*(.+)/);
-    if (svtVerM) {
-      const entry = `        ENGINE: ${svtVerM[1]}`;
-      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
-      return;
-    }
-    // SVT build line
-    const svtBuildM = line.match(/SVT \[build\]\s*:\s*(.+)/);
-    if (svtBuildM) {
-      const entry = `        BUILD:  ${svtBuildM[1]}`;
-      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
-      return;
-    }
-
-    // SVT config lines — compact format
-    const svtCfgM = line.match(/SVT \[config\]:\s*(.+?)\s{2,}:\s*(.+)/);
-    if (svtCfgM) {
-      const key = svtCfgM[1].trim().toUpperCase().replace(/\s*\/\s*/g, ' / ');
-      const val = svtCfgM[2].trim();
-      const entry = `        ${key.padEnd(50)} ${val}`;
-      console.log(entry); io.emit('logs', { type: 'init_append', text: entry });
-      return;
-    }
-    // Skip other Svt[info] noise (parallelism, PPCS, asm level)
-    if (/^Svt\[info\]:/.test(line)) return;
-
-    // Skip bare "Encoding" line (the single word before telemetry starts)
-    if (/^Encoding$/.test(line)) return;
-
-    // Default formatting
-    const TAG = type === 'error' ? 'ERR!' : type === 'stderr' ? 'WARN' : 'SYS ';
-    const entry = `[PRISM] ${ts} [${TAG}] ${line}`;
-    console.log(entry); io.emit('logs', { type, text: entry });
-  }
+  log(msg, type = 'info') { emitFormattedLog(msg, type); }
 }
 
 const worker = new Worker();
@@ -637,6 +602,7 @@ app.post('/api/pause', async (req, res) => {
 
 app.post('/api/resume', async (req, res) => {
   if (worker.processing) return res.json({ success: false, message: 'Already running' });
+  if (testEncodeRunning) return res.status(400).json({ error: 'A test encode is running — wait for it to finish' });
   if (queue.length === 0) return res.json({ success: false, message: 'Queue is empty' });
   paused = false;
   worker.start();
@@ -798,7 +764,31 @@ app.post('/api/test-encode', async (req, res) => {
   const testDir = path.join(process.env.OUTPUT_DIR || defaultOutput, 'TestEncodes', basename, timestamp);
   await fs.ensureDir(testDir);
 
-  const emit = (data) => io.emit('test_encode_status', data);
+  const emit = (data) => {
+    io.emit('test_encode_status', data);
+    // Mirror to status channel so Dashboard can display test encode progress
+    if (data.running) {
+      io.emit('status', {
+        active: true, status: 'encoding', testEncode: true,
+        activeJob: { name: path.basename(sourceFile) },
+        progress: data.progress || 0, phase: data.phase,
+        phaseLabel: data.phaseLabel,
+        variantIndex: data.variantIndex, totalVariants: data.totalVariants,
+        variantLabel: data.variantLabel,
+        queueLength: queue.length,
+        ...(data.fps != null ? { fps: data.fps } : {}),
+        ...(data.bitrate != null ? { bitrate: data.bitrate } : {}),
+        ...(data.size != null ? { size: data.size } : {}),
+        ...(data.estSize != null ? { estSize: data.estSize } : {}),
+        ...(data.elapsed != null ? { elapsed: data.elapsed } : {}),
+        ...(data.eta != null ? { eta: data.eta } : {}),
+        ...(data.currentFrame != null ? { currentFrame: data.currentFrame } : {}),
+        ...(data.totalFrames != null ? { totalFrames: data.totalFrames } : {}),
+      });
+    } else {
+      io.emit('status', { active: false, status: 'idle' });
+    }
+  };
   emit({ running: true, phase: 'sample', phaseLabel: 'Extracting sample', progress: 0, variantIndex: 0, totalVariants: variants.length, testDir });
 
   res.json({ message: 'Test encode started', testDir });
@@ -817,8 +807,8 @@ app.post('/api/test-encode', async (req, res) => {
         if (startTime) env.START_TIME = String(startTime);
         const child = spawn('bash', [path.join(TOOLS_DIR, 'generate-sample.sh')], { env, detached: true });
         currentTestEncodeChild = child;
-        child.stdout.on('data', (d) => { const clean = stripAnsi(d.toString()); io.emit('logs', `[TEST] ${clean}`); });
-        child.stderr.on('data', (d) => { const clean = stripAnsi(d.toString()); io.emit('logs', `[TEST] ${clean}`); });
+        child.stdout.on('data', (d) => emitFormattedLog(d.toString(), 'stdout'));
+        child.stderr.on('data', (d) => emitFormattedLog(d.toString(), 'stderr'));
         child.on('close', (code) => {
           currentTestEncodeChild = null;
           if (code !== 0) return reject(new Error(`Sample extraction failed (exit ${code})`));
@@ -829,7 +819,8 @@ app.post('/api/test-encode', async (req, res) => {
       });
 
       if (!await fs.pathExists(samplePath)) throw new Error('Sample file was not created');
-      const sampleFrames = await probeVideo(samplePath);
+      const sampleProbe = await probeVideo(samplePath);
+      const sampleFrames = sampleProbe.totalFrames;
 
       // Phase 1b: Generate source screenshots
       if (testEncodeRunning) {
@@ -849,8 +840,8 @@ app.post('/api/test-encode', async (req, res) => {
           };
           const child = spawn('bash', [path.join(TOOLS_DIR, 'generate-screenshots.sh')], { env, detached: true });
           currentTestEncodeChild = child;
-          child.stdout.on('data', (d) => { io.emit('logs', `[TEST:screenshots:source] ${stripAnsi(d.toString())}`); });
-          child.stderr.on('data', (d) => { io.emit('logs', `[TEST:screenshots:source] ${stripAnsi(d.toString())}`); });
+          child.stdout.on('data', (d) => emitFormattedLog(d.toString(), 'stdout'));
+          child.stderr.on('data', (d) => emitFormattedLog(d.toString(), 'stderr'));
           child.on('close', (code) => {
             currentTestEncodeChild = null;
             if (code !== 0) return reject(new Error(`Screenshots failed for source (exit ${code})`));
@@ -884,17 +875,18 @@ app.post('/api/test-encode', async (req, res) => {
           const child = spawn('bash', [path.join(SCRIPTS_DIR, 'encode_single.sh'), ...args], { detached: true });
           currentTestEncodeChild = child;
           let cropInfo = null;
-          const onData = (d) => {
-            const clean = stripAnsi(d.toString());
-            io.emit('logs', `[TEST:${variant.label}] ${clean}`);
+          const onData = (d, type) => {
+            const raw = d.toString();
+            const clean = stripAnsi(raw);
+            emitFormattedLog(raw, type);
             const result = parseEncodeOutput(clean, sampleFrames, cropInfo);
             if (result.cropInfo) cropInfo = result.cropInfo;
             if (result.progress >= 0) {
               emit({ running: true, phase: 'encoding', phaseLabel: `Encoding variant: ${variant.label}`, progress: result.progress, variantIndex: vi + 1, totalVariants: variants.length, variantLabel: variant.label, testDir, ...result.stats });
             }
           };
-          child.stdout.on('data', onData);
-          child.stderr.on('data', onData);
+          child.stdout.on('data', (d) => onData(d, 'stdout'));
+          child.stderr.on('data', (d) => onData(d, 'stderr'));
           child.on('close', (code) => {
             currentTestEncodeChild = null;
             if (code !== 0) return reject(new Error(`Encode failed for variant "${variant.label}" (exit ${code})`));
@@ -923,8 +915,8 @@ app.post('/api/test-encode', async (req, res) => {
           };
           const child = spawn('bash', [path.join(TOOLS_DIR, 'generate-screenshots.sh')], { env, detached: true });
           currentTestEncodeChild = child;
-          child.stdout.on('data', (d) => { io.emit('logs', `[TEST:screenshots:${variant.label}] ${stripAnsi(d.toString())}`); });
-          child.stderr.on('data', (d) => { io.emit('logs', `[TEST:screenshots:${variant.label}] ${stripAnsi(d.toString())}`); });
+          child.stdout.on('data', (d) => emitFormattedLog(d.toString(), 'stdout'));
+          child.stderr.on('data', (d) => emitFormattedLog(d.toString(), 'stderr'));
           child.on('close', (code) => {
             currentTestEncodeChild = null;
             if (code !== 0) return reject(new Error(`Screenshots failed for variant "${variant.label}" (exit ${code})`));
@@ -934,9 +926,9 @@ app.post('/api/test-encode', async (req, res) => {
       }
 
       emit({ running: false, phase: 'done', phaseLabel: 'Test encode complete', progress: 100, testDir });
-      io.emit('logs', `[TEST] Complete. Output: ${testDir}`);
+      emitFormattedLog(`Test encode complete. Output: ${testDir}`, 'info');
     } catch (err) {
-      io.emit('logs', `[TEST] Error: ${err.message}`);
+      emitFormattedLog(`Test encode error: ${err.message}`, 'error');
       emit({ running: false, phase: 'error', phaseLabel: `Error: ${err.message}`, progress: 0, testDir });
     } finally {
       testEncodeRunning = false;
