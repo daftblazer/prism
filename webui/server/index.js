@@ -41,6 +41,16 @@ let toolRunning = false;
 let testEncodeRunning = false;
 let currentTestEncodeChild = null;
 
+function getCurrentStatus() {
+  const s = isBuilding ? 'building' : (worker.processing ? 'encoding' : (paused ? 'paused' : 'idle'));
+  return { active: isBuilding || worker.processing, status: s, activeJob: isBuilding ? { name: 'Building' } : (currentJob ? { name: currentJob.input_folder } : null), queueLength: queue.length };
+}
+
+io.on('connection', (socket) => {
+  socket.emit('status', getCurrentStatus());
+  socket.emit('queue_update', queue);
+});
+
 async function loadSettings() {
   try {
     if (await fs.pathExists(SETTINGS_FILE)) return await fs.readJson(SETTINGS_FILE);
@@ -583,8 +593,7 @@ app.delete('/api/queue/:id', async (req, res) => {
   else res.status(404).json({ error: 'Missing' });
 });
 app.get('/api/status', (req, res) => {
-  const s = isBuilding ? 'building' : (worker.processing ? 'encoding' : (paused ? 'paused' : 'idle'));
-  res.json({ active: isBuilding || worker.processing, status: s, activeJob: isBuilding ? { name: 'Building' } : (currentJob ? { name: currentJob.input_folder } : null), queueLength: queue.length });
+  res.json(getCurrentStatus());
 });
 
 app.post('/api/pause', async (req, res) => {
@@ -1116,7 +1125,7 @@ app.delete('/api/cleanup/work-dirs', async (req, res) => {
   }
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '0.1.1', channel: 'release' }));
+app.get('/api/version', (req, res) => res.json({ version: '0.2.0-nightly.20260321', channel: 'nightly' }));
 
 if (fs.existsSync(frontendDist)) app.get('*', (req, res) => { if (!req.path.startsWith('/api')) res.sendFile(path.join(frontendDist, 'index.html')); });
 
