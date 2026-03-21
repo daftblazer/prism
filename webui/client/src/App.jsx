@@ -15,7 +15,7 @@ const socket = io();
 
 // --- Helper Components ---
 
-const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled, lightMode, setLightMode }) => {
+const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled, lightMode, setLightMode, fontSize, setFontSize }) => {
   const [releaseGroup, setReleaseGroup] = useState(appSettings?.releaseGroup || '');
   useEffect(() => { setReleaseGroup(appSettings?.releaseGroup || ''); }, [appSettings?.releaseGroup]);
   const handleReleaseGroupSave = () => { saveAppSettings({ releaseGroup }); };
@@ -44,7 +44,7 @@ const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled,
               {crtEnabled ? 'On' : 'Off'}
             </button>
           </div>
-          <div className={cn(rowCls, "px-4 border-b-0")}>
+          <div className={cn(rowCls, "px-4")}>
             <div>
               <span className={labelCls}>Light Mode</span>
               <p className="text-[11px] text-steel-dim mt-0.5">Switch to light color scheme</p>
@@ -52,6 +52,18 @@ const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled,
             <button onClick={() => setLightMode(!lightMode)} className={cn(toggleBase, lightMode ? "border-nerv/30 bg-nerv/10 text-nerv" : toggleOff)}>
               {lightMode ? 'On' : 'Off'}
             </button>
+          </div>
+          <div className={cn(rowCls, "px-4 border-b-0")}>
+            <div>
+              <span className={labelCls}>Font Size</span>
+              <p className="text-[11px] text-steel-dim mt-0.5">Scale the interface text ({fontSize}%)</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setFontSize(s => Math.max(75, s - 5))} className="w-8 h-8 border border-sf bg-void text-steel-dim hover:text-nerv hover:border-nerv/30 transition-all font-bold text-sm">−</button>
+              <span className="text-xs font-bold text-steel tabular-nums w-10 text-center">{fontSize}%</span>
+              <button onClick={() => setFontSize(s => Math.min(150, s + 5))} className="w-8 h-8 border border-sf bg-void text-steel-dim hover:text-nerv hover:border-nerv/30 transition-all font-bold text-sm">+</button>
+              {fontSize !== 100 && <button onClick={() => setFontSize(100)} className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider border border-sf bg-void text-steel-dim hover:text-nerv transition-all">Reset</button>}
+            </div>
           </div>
         </div>
       </div>
@@ -1682,6 +1694,7 @@ const App = () => {
   const [versionInfo, setVersionInfo] = useState({ version: null, channel: 'release' });
   const [crtEnabled, setCrtEnabled] = useState(() => localStorage.getItem('crt-effects') !== 'off');
   const [lightMode, setLightMode] = useState(() => localStorage.getItem('theme') === 'light');
+  const [fontSize, setFontSize] = useState(() => parseInt(localStorage.getItem('font-size') || '100', 10));
 
   useEffect(() => {
     localStorage.setItem('crt-effects', crtEnabled ? 'on' : 'off');
@@ -1692,6 +1705,11 @@ const App = () => {
     localStorage.setItem('theme', lightMode ? 'light' : 'dark');
     document.documentElement.setAttribute('data-theme', lightMode ? 'light' : 'dark');
   }, [lightMode]);
+
+  useEffect(() => {
+    localStorage.setItem('font-size', String(fontSize));
+    document.documentElement.style.fontSize = `${fontSize}%`;
+  }, [fontSize]);
 
   const fetchEncoders = useCallback(async () => { try { const res = await axios.get('/api/encoders'); setEncoders(res.data); } catch (err) { console.error(err); } }, []);
   const fetchQueue = useCallback(async () => { try { const res = await axios.get('/api/queue'); setQueue(res.data); } catch (err) { console.error(err); } }, []);
@@ -1826,7 +1844,7 @@ const App = () => {
             {activeTab === 'queue' && <QueueSection queue={queue} />}
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
             {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}
-            {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} />}
+            {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} fontSize={fontSize} setFontSize={setFontSize} />}
           </div>
         )}
       </main>
