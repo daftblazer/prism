@@ -359,10 +359,8 @@ done
 # 4) Build encoding settings tag
 ENCODER_VERSION="$("$ENCODER" 2>&1 | sed -n 's/.*SVT \[version\]:\s*//p' || echo "unknown")"
 [[ -z "$ENCODER_VERSION" ]] && ENCODER_VERSION="unknown"
-ENCODER_NAME="$(basename "$(dirname "$(dirname "$ENCODER")")")"
-
 SETTINGS_PARTS=()
-SETTINGS_PARTS+=("prism / ${ENCODER_NAME}")
+SETTINGS_PARTS+=("PRISM")
 SETTINGS_PARTS+=("${ENCODER_VERSION}")
 SETTINGS_PARTS+=("--crf ${CRF} --preset ${PRESET} --tune ${TUNE} --keyint ${KEYINT}")
 if [[ -n "$CUSTOM_FLAGS" ]]; then
