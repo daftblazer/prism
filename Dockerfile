@@ -4,7 +4,7 @@ LABEL org.opencontainers.image.source=https://github.com/daftblazer/prism
 # Install all dependencies including Node.js and build tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      ffmpeg mkvtoolnix build-essential cmake ninja-build \
+      ffmpeg mkvtoolnix mediainfo build-essential cmake ninja-build \
       nasm yasm pkg-config git nodejs npm python3 python3-pip \
       curl ca-certificates wget tmux htop procps file \
     && rm -rf /var/lib/apt/lists/*
