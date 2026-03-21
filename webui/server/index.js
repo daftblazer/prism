@@ -1088,6 +1088,34 @@ app.delete('/api/test-encodes/all', async (req, res) => {
   }
 });
 
+app.delete('/api/cleanup/work-dirs', async (req, res) => {
+  try {
+    const defaultOutput = path.join(__dirname, '..', '..', 'output');
+    const outputRoot = process.env.OUTPUT_DIR || defaultOutput;
+    let removed = 0;
+
+    const cleanDir = async (dir) => {
+      if (!await fs.pathExists(dir)) return;
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name.startsWith('.work-')) {
+          await fs.remove(path.join(dir, entry.name));
+          removed++;
+        } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          await cleanDir(path.join(dir, entry.name));
+        }
+      }
+    };
+
+    await cleanDir(outputRoot);
+    emitFormattedLog(`Cleaned up ${removed} leftover work director${removed === 1 ? 'y' : 'ies'}`, 'info');
+    res.json({ success: true, removed });
+  } catch (err) {
+    console.error('Error cleaning work dirs:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/version', (req, res) => res.json({ version: '0.1.1', channel: 'release' }));
 
 if (fs.existsSync(frontendDist)) app.get('*', (req, res) => { if (!req.path.startsWith('/api')) res.sendFile(path.join(frontendDist, 'index.html')); });

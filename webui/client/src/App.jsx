@@ -39,6 +39,12 @@ const SettingsPanel = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled
           {lightMode ? 'On' : 'Off'}
         </button>
       </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[14px] font-bold uppercase tracking-widest text-nerv">Work Dirs</span>
+        <button onClick={async () => { try { const { data } = await axios.delete('/api/cleanup/work-dirs'); alert(`Removed ${data.removed} leftover work director${data.removed === 1 ? 'y' : 'ies'}`); } catch (e) { alert(e.response?.data?.error || e.message); } }} className="px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border border-sf bg-void text-steel-dim hover:border-alert-red/30 hover:bg-alert-red/10 hover:text-alert-red">
+          Clean Up
+        </button>
+      </div>
     </div>
   );
 };
