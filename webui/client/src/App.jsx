@@ -220,6 +220,128 @@ const WebhookRow = ({ webhook, onUpdate, onDelete }) => {
   );
 };
 
+const HistoryPage = () => {
+  const [entries, setEntries] = useState([]);
+  const [filter, setFilter] = useState('all');
+  const [expandedId, setExpandedId] = useState(null);
+  const [expandedLog, setExpandedLog] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchHistory = async () => {
+    try { const res = await axios.get('/api/history'); setEntries(res.data); }
+    catch { setEntries([]); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { fetchHistory(); }, []);
+
+  const handleExpand = async (id) => {
+    if (expandedId === id) { setExpandedId(null); setExpandedLog(null); return; }
+    setExpandedId(id);
+    setExpandedLog(null);
+    try {
+      const res = await axios.get(`/api/history/${id}`);
+      setExpandedLog(res.data.output || '(no output)');
+    } catch { setExpandedLog('(failed to load log)'); }
+  };
+
+  const handleClear = async () => {
+    if (!confirm('Clear all history?')) return;
+    try { await axios.delete('/api/history'); setEntries([]); } catch { }
+  };
+
+  const handleDelete = async (id) => {
+    try { await axios.delete(`/api/history/${id}`); setEntries(prev => prev.filter(e => e.id !== id)); }
+    catch { }
+  };
+
+  const filtered = filter === 'all' ? entries : entries.filter(e => e.type === filter);
+  const filterBtn = (value, label) => (
+    <button onClick={() => setFilter(value)} className={cn("px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider border transition-all", filter === value ? "border-nerv/30 bg-nerv/10 text-nerv" : "border-sf bg-void text-steel-dim hover:text-nerv")}>{label}</button>
+  );
+
+  const fmtDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          {filterBtn('all', 'All')}
+          {filterBtn('tool', 'Tools')}
+          {filterBtn('encode', 'Encodes')}
+        </div>
+        {entries.length > 0 && (
+          <button onClick={handleClear} className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider border border-sf bg-void text-steel-dim hover:border-alert-red/30 hover:bg-alert-red/10 hover:text-alert-red transition-all">Clear History</button>
+        )}
+      </div>
+      {loading ? (
+        <div className="p-16 text-center font-bold animate-pulse uppercase tracking-wider text-nerv text-xs">Loading...</div>
+      ) : filtered.length === 0 ? (
+        <div className="border border-sf bg-void-panel p-12 text-center">
+          <span className="text-[12px] font-bold uppercase tracking-widest text-steel-dim">No history entries</span>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {filtered.map(entry => (
+            <div key={entry.id} className="border border-sf bg-void-panel">
+              <div className="px-4 py-3 flex items-center gap-4">
+                {entry.type === 'tool' ? (
+                  <Wrench className="w-4 h-4 text-wire-cyan shrink-0" />
+                ) : (
+                  <Activity className="w-4 h-4 text-data-green shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-steel truncate">
+                      {entry.type === 'tool' ? entry.toolName : entry.folder}
+                    </span>
+                    {entry.type === 'tool' && (
+                      <span className={cn("text-[10px] font-bold uppercase px-1.5 py-0.5 border", entry.exitCode === 0 ? "border-data-green/30 text-data-green" : "border-alert-red/30 text-alert-red")}>
+                        {entry.exitCode === 0 ? 'Pass' : `Exit ${entry.exitCode}`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 mt-1 text-[11px] font-bold text-steel-dim">
+                    <span>{fmtDate(entry.completedAt)}</span>
+                    {entry.type === 'encode' && (<>
+                      <span>{entry.encoder}</span>
+                      <span>CRF {entry.crf} / P{entry.preset}</span>
+                      <span>{entry.files} file{entry.files !== 1 ? 's' : ''}</span>
+                      <span>{entry.duration}</span>
+                      <span>{entry.totalSize}</span>
+                    </>)}
+                    {entry.type === 'tool' && entry.env && Object.values(entry.env).filter(Boolean).length > 0 && (
+                      <span className="truncate max-w-xs">{Object.values(entry.env).filter(Boolean).join(' ')}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {entry.type === 'tool' && (
+                    <button onClick={() => handleExpand(entry.id)} className="px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider border border-sf bg-void text-steel-dim hover:text-wire-cyan hover:border-wire-cyan/30 transition-all">
+                      {expandedId === entry.id ? 'Hide' : 'Log'}
+                    </button>
+                  )}
+                  <button onClick={() => handleDelete(entry.id)} className="p-1.5 border border-sf bg-void text-steel-dim hover:text-alert-red hover:border-alert-red/30 transition-all">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              {expandedId === entry.id && (
+                <div className="border-t border-sf bg-void max-h-96 overflow-auto p-4 font-sys text-[12px] leading-relaxed text-data-green-dim whitespace-pre-wrap">
+                  {expandedLog === null ? <span className="text-steel-dim animate-pulse">Loading...</span> : expandedLog}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const NavItem = ({ icon, label, active, onClick }) => {
   return (
     <button onClick={onClick} className={cn("w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold transition-all uppercase tracking-wider", active ? "text-nerv bg-nerv/10 border-l-2 border-nerv" : "text-steel-dim hover:text-nerv border-l-2 border-transparent")}>{icon}{label}</button>
@@ -2069,6 +2191,7 @@ const ToolRunModal = ({ tool, onClose, setToolLogs, appSettings, favorites, togg
   const [subTrackNames, setSubTrackNames] = useState([]);
   const [audioTracks, setAudioTracks] = useState([]);
   const [probingAudio, setProbingAudio] = useState(false);
+  const [notify, setNotify] = useState(false);
 
   useEffect(() => { browse(browsePath); }, [browsePath]);
 
@@ -2126,11 +2249,12 @@ const ToolRunModal = ({ tool, onClose, setToolLogs, appSettings, favorites, togg
     Object.keys(env).forEach(k => { if (env[k] === '') delete env[k]; });
     setToolLogs([]);
     try {
-      await axios.post(`/api/tools/${tool.id}/run`, { env });
+      await axios.post(`/api/tools/${tool.id}/run`, { env, notify });
       onClose();
     } catch (e) { alert(e.response?.data?.error || e.message); }
   };
 
+  const hasWebhooks = (appSettings?.webhooks || []).some(w => w.enabled && w.url);
   const inputCls = "w-full border border-sf bg-void p-2.5 text-xs font-bold text-steel font-sys";
   const pathVars = tool.envVars.filter(v => v.type === 'path');
   const fileVar = tool.envVars.find(v => v.type === 'file');
@@ -2216,6 +2340,11 @@ const ToolRunModal = ({ tool, onClose, setToolLogs, appSettings, favorites, togg
               <button onClick={() => setEnvValues({...envValues, DRY_RUN: envValues.DRY_RUN === '1' ? '0' : '1'})} className={cn("flex items-center gap-2 px-3 py-2.5 text-[15px] font-bold uppercase border transition-all", envValues.DRY_RUN === '1' ? "border-nerv/30 bg-nerv/10 text-nerv" : "border-sf bg-void text-steel-dim")}>
                 {envValues.DRY_RUN === '1' ? 'DRY RUN ON' : 'DRY RUN OFF'}
               </button>
+              {hasWebhooks && (
+                <button onClick={() => setNotify(!notify)} title="Send webhook notification when complete" className={cn("flex items-center gap-2 px-3 py-2.5 text-[15px] font-bold uppercase border transition-all", notify ? "border-wire-cyan/30 bg-wire-cyan/10 text-wire-cyan" : "border-sf bg-void text-steel-dim")}>
+                  <Bell className="w-3.5 h-3.5" /> {notify ? 'Notify On' : 'Notify'}
+                </button>
+              )}
             </div>
             <button onClick={handleRun} className="w-full py-4 font-bold text-sm transition-all active:scale-[0.98] uppercase tracking-wider text-black flex items-center justify-center gap-2 bg-nerv hover:bg-nerv-hot">
               <Play className="w-4 h-4" /> Run Tool
@@ -2866,6 +2995,12 @@ const App = () => {
     
     fetchEncoders(); fetchQueue(); fetchSettings();
     axios.get('/api/version').then(res => setVersionInfo(res.data)).catch(() => {});
+    axios.get('/api/tools/current-output').then(res => {
+      if (res.data.output?.length) setToolLogs(res.data.output);
+      if (res.data.meta) setToolStatus(res.data.running
+        ? { running: true, toolId: res.data.meta.toolId, toolName: res.data.meta.toolName }
+        : { running: false, toolId: res.data.meta.toolId, toolName: res.data.meta.toolName });
+    }).catch(() => {});
 
     const metricsInterval = setInterval(() => {
       axios.get('/api/system/metrics').then(res => setSystemMetrics(res.data)).catch(() => {});
@@ -2935,6 +3070,7 @@ const App = () => {
           <NavItem icon={<Wrench className="w-3.5 h-3.5" />} label="Tools" active={activeTab === 'tools'} onClick={() => setActiveTab('tools')} />
           <NavItem icon={<Music className="w-3.5 h-3.5" />} label="Audio" active={activeTab === 'audio'} onClick={() => setActiveTab('audio')} />
           <NavItem icon={<Languages className="w-3.5 h-3.5" />} label="Subtitles" active={activeTab === 'subtitles'} onClick={() => setActiveTab('subtitles')} />
+          <NavItem icon={<Clock className="w-3.5 h-3.5" />} label="History" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
           <NavItem icon={<FlaskConical className="w-3.5 h-3.5" />} label="Compare" active={activeTab === 'compare'} onClick={() => setActiveTab('compare')} />
           <NavItem icon={<Settings className="w-3.5 h-3.5" />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
         </nav>
@@ -2966,6 +3102,7 @@ const App = () => {
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
             {activeTab === 'audio' && <AudioScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} />}
             {activeTab === 'subtitles' && <SubtitleScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} />}
+            {activeTab === 'history' && <HistoryPage />}
             {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}
             {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} systemMetrics={systemMetrics} />}
           </div>

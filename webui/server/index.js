@@ -30,6 +30,8 @@ const ROOT_DIR = path.join(__dirname, '../../');
 const TOOLS_DIR = path.join(__dirname, '../../tools');
 const SETTINGS_FILE = path.join(CONFIG_DIR, 'settings.json');
 const TOOL_REGISTRY_FILE = path.join(__dirname, '../shared/toolRegistry.json');
+const HISTORY_FILE = path.join(CONFIG_DIR, 'history.json');
+const HISTORY_DIR = path.join(CONFIG_DIR, 'history');
 
 let queue = [];
 let currentJob = null;
@@ -37,6 +39,8 @@ let isBuilding = false;
 let paused = false;
 let currentToolChild = null;
 let toolRunning = false;
+let currentToolBuffer = [];
+let currentToolMeta = null;
 let testEncodeRunning = false;
 let currentTestEncodeChild = null;
 
@@ -153,6 +157,9 @@ function getCurrentStatus() {
 io.on('connection', (socket) => {
   socket.emit('status', getCurrentStatus());
   socket.emit('queue_update', queue);
+  if (currentToolMeta) {
+    socket.emit('tool_status', { running: toolRunning, toolId: currentToolMeta.toolId, toolName: currentToolMeta.toolName });
+  }
 });
 
 async function loadSettings() {
@@ -164,6 +171,36 @@ async function loadSettings() {
 
 async function saveSettings(settings) {
   try { await fs.ensureDir(CONFIG_DIR); await fs.writeJson(SETTINGS_FILE, settings); } catch (err) { console.error('Settings save error:', err); }
+}
+
+// --- History Persistence ---
+const MAX_HISTORY_ENTRIES = 200;
+const MAX_TOOL_OUTPUT_LINES = 5000;
+
+async function loadHistory() {
+  try {
+    if (await fs.pathExists(HISTORY_FILE)) return await fs.readJson(HISTORY_FILE);
+  } catch (err) { console.error('History load error:', err); }
+  return { entries: [] };
+}
+
+async function saveHistory(history) {
+  if (history.entries.length > MAX_HISTORY_ENTRIES) {
+    const pruned = history.entries.splice(0, history.entries.length - MAX_HISTORY_ENTRIES);
+    for (const entry of pruned) {
+      if (entry.type === 'tool') {
+        await fs.remove(path.join(HISTORY_DIR, `${entry.id}.log`)).catch(() => {});
+      }
+    }
+  }
+  try { await fs.ensureDir(CONFIG_DIR); await fs.writeJson(HISTORY_FILE, history); }
+  catch (err) { console.error('History save error:', err); }
+}
+
+async function addHistoryEntry(entry) {
+  const history = await loadHistory();
+  history.entries.push(entry);
+  await saveHistory(history);
 }
 
 // --- Webhook Notifications ---
@@ -215,6 +252,30 @@ function buildDiscordPayload(event, data) {
           { name: 'File', value: data.file, inline: true },
           { name: 'Exit Code', value: `${data.exitCode}`, inline: true },
         ],
+        timestamp: data.timestamp,
+        footer: { text: 'PRISM' },
+      }],
+    };
+  }
+  if (event === 'tool_complete') {
+    const passed = data.exitCode === 0;
+    const fields = [
+      { name: 'Tool', value: data.toolName, inline: true },
+      { name: 'Duration', value: data.duration, inline: true },
+    ];
+    if (data.total !== undefined) {
+      fields.push({ name: 'Results', value: `${data.passed}/${data.total} passed, ${data.failed} failed`, inline: true });
+      if (data.failedFiles?.length > 0) {
+        fields.push({ name: 'Failed Files', value: data.failedFiles.map(f => `• ${f}`).join('\n'), inline: false });
+      }
+    } else {
+      fields.push({ name: 'Exit Code', value: `${data.exitCode}`, inline: true });
+    }
+    return {
+      embeds: [{
+        title: passed ? 'Tool Complete' : 'Tool Failed',
+        color: passed ? 0x00c853 : 0xff1744,
+        fields,
         timestamp: data.timestamp,
         footer: { text: 'PRISM' },
       }],
@@ -581,6 +642,15 @@ class Worker {
         files: this.totalFiles,
         duration: formatDuration(elapsed),
         totalSize: formatSize(totalSize),
+      });
+      addHistoryEntry({
+        id: uuidv4(), type: 'encode',
+        folder: path.basename(batch.input_folder),
+        encoder: path.basename(batch.encoder || 'unknown'),
+        crf: batch.crf, preset: batch.preset, tune: batch.tune || '',
+        customFlags: batch.custom_flags || '', subfolder: batch.subfolder || '',
+        files: this.totalFiles, duration: formatDuration(elapsed), totalSize: formatSize(totalSize),
+        completedAt: new Date().toISOString(),
       });
     }
   }
@@ -1386,6 +1456,10 @@ app.post('/api/tools/:id/run', async (req, res) => {
   }
 
   toolRunning = true;
+  const runId = uuidv4();
+  const toolNotify = !!req.body.notify;
+  currentToolBuffer = [];
+  currentToolMeta = { id: runId, toolId: tool.id, toolName: tool.name, startedAt: new Date().toISOString(), env: req.body.env || {} };
   io.emit('tool_status', { running: true, toolId: tool.id, toolName: tool.name });
 
   // Use the first absolute path the user provided as cwd, so relative defaults (e.g. "Output") resolve sensibly
@@ -1393,13 +1467,61 @@ app.post('/api/tools/:id/run', async (req, res) => {
   const child = spawn('bash', [scriptPath], { env: envVars, cwd: toolCwd });
   currentToolChild = child;
 
-  child.stdout.on('data', (d) => { const clean = stripAnsi(d.toString()); io.emit('tool_output', clean); });
-  child.stderr.on('data', (d) => { const clean = stripAnsi(d.toString()); io.emit('tool_output', clean); });
-  child.on('close', (code) => {
+  const bufferOutput = (d) => {
+    const clean = stripAnsi(d.toString());
+    io.emit('tool_output', clean);
+    if (currentToolBuffer.length < MAX_TOOL_OUTPUT_LINES) currentToolBuffer.push(clean);
+  };
+  child.stdout.on('data', bufferOutput);
+  child.stderr.on('data', bufferOutput);
+  child.on('close', async (code) => {
     currentToolChild = null;
     toolRunning = false;
-    io.emit('tool_output', `\n[Process exited with code ${code}]\n`);
+    const exitLine = `\n[Process exited with code ${code}]\n`;
+    io.emit('tool_output', exitLine);
+    if (currentToolBuffer.length < MAX_TOOL_OUTPUT_LINES) currentToolBuffer.push(exitLine);
     io.emit('tool_status', { running: false, toolId: tool.id, toolName: tool.name, exitCode: code });
+
+    // Save to history
+    if (currentToolMeta) {
+      const elapsed = Date.now() - new Date(currentToolMeta.startedAt).getTime();
+      const entry = {
+        id: currentToolMeta.id, type: 'tool', toolId: tool.id, toolName: tool.name,
+        startedAt: currentToolMeta.startedAt, completedAt: new Date().toISOString(),
+        exitCode: code, env: currentToolMeta.env,
+      };
+      try {
+        await fs.ensureDir(HISTORY_DIR);
+        await fs.writeFile(path.join(HISTORY_DIR, `${entry.id}.log`), currentToolBuffer.join(''));
+      } catch (err) { console.error('History log write error:', err); }
+      await addHistoryEntry(entry);
+
+      // Send webhook if user opted in
+      if (toolNotify) {
+        const webhookData = {
+          timestamp: new Date().toISOString(),
+          toolId: tool.id,
+          toolName: tool.name,
+          exitCode: code,
+          duration: formatDuration(elapsed),
+        };
+        // Parse verify_integrity summary from output
+        if (tool.id === 'verify_integrity') {
+          const fullOutput = currentToolBuffer.join('');
+          const totalMatch = fullOutput.match(/Total:\s+(\d+)/);
+          const passedMatch = fullOutput.match(/Passed:\s+(\d+)/);
+          const failedMatch = fullOutput.match(/Failed:\s+(\d+)/);
+          if (totalMatch) webhookData.total = parseInt(totalMatch[1]);
+          if (passedMatch) webhookData.passed = parseInt(passedMatch[1]);
+          if (failedMatch) webhookData.failed = parseInt(failedMatch[1]);
+          const failedSection = fullOutput.match(/FAILED FILES:\n([\s\S]*?)(?:\n\n|$)/);
+          if (failedSection) {
+            webhookData.failedFiles = failedSection[1].trim().split('\n').map(l => l.replace(/^\s*-\s*/, '').trim()).filter(Boolean);
+          }
+        }
+        sendWebhookNotification('tool_complete', webhookData);
+      }
+    }
   });
 
   res.json({ message: 'Tool started', toolId: tool.id });
@@ -1409,6 +1531,53 @@ app.post('/api/tools/:id/stop', (req, res) => {
   if (!currentToolChild) return res.json({ success: false, message: 'No tool running' });
   try { currentToolChild.kill('SIGTERM'); } catch (e) { console.error('Kill error:', e); }
   res.json({ success: true });
+});
+
+app.get('/api/tools/current-output', (req, res) => {
+  res.json({ meta: currentToolMeta, output: currentToolBuffer, running: toolRunning });
+});
+
+// --- History API ---
+app.get('/api/history', async (req, res) => {
+  try {
+    const history = await loadHistory();
+    res.json(history.entries.slice().reverse());
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/history/:id', async (req, res) => {
+  try {
+    const history = await loadHistory();
+    const entry = history.entries.find(e => e.id === req.params.id);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+    let output = null;
+    if (entry.type === 'tool') {
+      const logFile = path.join(HISTORY_DIR, `${entry.id}.log`);
+      if (await fs.pathExists(logFile)) output = await fs.readFile(logFile, 'utf-8');
+    }
+    res.json({ ...entry, output });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/history', async (req, res) => {
+  try {
+    await fs.remove(HISTORY_DIR);
+    await fs.writeJson(HISTORY_FILE, { entries: [] });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/history/:id', async (req, res) => {
+  try {
+    const history = await loadHistory();
+    const idx = history.entries.findIndex(e => e.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Entry not found' });
+    const entry = history.entries[idx];
+    history.entries.splice(idx, 1);
+    await fs.writeJson(HISTORY_FILE, history);
+    if (entry.type === 'tool') await fs.remove(path.join(HISTORY_DIR, `${entry.id}.log`)).catch(() => {});
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // --- Test Encode API ---
