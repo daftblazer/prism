@@ -8,7 +8,7 @@ A batch AV1 video encoding system with a NERV-inspired web dashboard for managin
 
 - **Batch encoding** — Queue entire folders of video files for AV1 encoding with real-time telemetry
 - **Parallel encoding** — Run multiple encode instances simultaneously with CCD-aware CPU pinning via `taskset`, configurable reserved cores, and per-instance `--lp` thread control
-- **Multiple encoder support** — Build and switch between SVT-AV1 forks (5fish PSY, Tritium, Essential) from source, with branch selection
+- **Multiple encoder support** — Build and switch between SVT-AV1 forks (5fish PSY, HDR, Essential) from source, with branch selection
 - **Smart audio handling** — Lossless audio is transcoded to Opus; lossy formats are copied as-is with language tags and titles preserved
 - **Auto-crop detection** — Automatically detects and removes black bars
 - **Real-time dashboard** — Live encoding statistics (frames, speed, bitrate, size, ETA), system metrics (per-core CPU, memory), NERV-styled terminal output, media intelligence panel, and operation queue
@@ -101,7 +101,7 @@ Encoders are compiled from source inside the container via build scripts:
 | Encoder | Fork | Default Branch | Description |
 |---------|------|----------------|-------------|
 | **5fish** | [svt-av1-psy](https://github.com/5fish/svt-av1-psy) | `exp` | Psycho-visual tuned SVT-AV1 |
-| **Tritium** | [svt-av1-tritium](https://github.com/Uranite/svt-av1-tritium) | `main` | Tritium SVT-AV1 fork |
+| **HDR** | [svt-av1-hdr](https://github.com/juliobbv-p/svt-av1-hdr) | `main` | SVT-AV1 fork optimized for live-action and HDR content |
 | **Essential** | [SVT-AV1-Essential](https://github.com/nekotrix/SVT-AV1-Essential) | `Essential-v4.0.1` | Essential SVT-AV1 fork |
 
 Encoders are built and stored in `/config/encoders/<name>/` and can be compiled or rebuilt from the **Encoders** tab.

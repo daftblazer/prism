@@ -2,14 +2,14 @@
 set -euo pipefail
 
 # ---- Defaults (override via env or flags) ----
-REPO_URL="${REPO_URL:-https://github.com/Uranite/svt-av1-tritium.git}"
+REPO_URL="${REPO_URL:-https://github.com/juliobbv-p/svt-av1-hdr.git}"
 BRANCH="${BRANCH:-main}"
 # Use /config/encoders if it exists (Docker), else fall back to project dir
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -d "/config/encoders" ]]; then
-  DEFAULT_PREFIX="/config/encoders/tritium"
+  DEFAULT_PREFIX="/config/encoders/hdr"
 else
-  DEFAULT_PREFIX="$SCRIPT_DIR/config/encoders/tritium"
+  DEFAULT_PREFIX="$SCRIPT_DIR/config/encoders/hdr"
 fi
 PREFIX="${PREFIX:-$DEFAULT_PREFIX}"
 JOBS="${JOBS:-$(nproc)}"
@@ -27,7 +27,7 @@ Usage: $(basename "$0") [options]
 Options:
   --prefix PATH        Install prefix (default: $PREFIX)
   --src PATH           Persistent source dir (default: temp workspace)
-  --build PATH         Build dir (default: <src>/build-tritium)
+  --build PATH         Build dir (default: <src>/build-hdr)
   --jobs N             Parallel jobs (default: $JOBS)
   --update [pull|reset]
                        pull  = git pull (may conflict on rebases)
@@ -89,7 +89,7 @@ need_cmd ninja
 
 # ---- Workspace selection ----
 if [[ "$USE_TEMP_WORKDIR" -eq 1 ]]; then
-  TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/tritium-build.XXXXXX")"
+  TEMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/hdr-build.XXXXXX")"
   SRC_DIR="$TEMP_ROOT/src"
   BUILD_DIR="$TEMP_ROOT/build"
   CLEAN=1
@@ -99,10 +99,10 @@ if [[ "$USE_TEMP_WORKDIR" -eq 1 ]]; then
   echo "==> Using temporary workspace: $TEMP_ROOT"
 else
   if [[ -z "$SRC_DIR" ]]; then
-    SRC_DIR="$HOME/src/svt-av1-tritium"
+    SRC_DIR="$HOME/src/svt-av1-hdr"
   fi
   if [[ -z "$BUILD_DIR" ]]; then
-    BUILD_DIR="$SRC_DIR/build-tritium"
+    BUILD_DIR="$SRC_DIR/build-hdr"
   fi
 fi
 
@@ -116,7 +116,6 @@ else
   if [[ "$UPDATE_MODE" == "pull" ]]; then
     git pull --rebase --autostash
   else
-    # Tritium README warns history may be rebased; this is the safe update path.
     git fetch origin
     git reset --hard "origin/$BRANCH"
     git submodule update --init --recursive
@@ -152,7 +151,7 @@ if [[ "$DO_INSTALL" -eq 1 ]]; then
 fi
 
 # ---- Convenience wrapper (optional but handy) ----
-WRAPPER="$PREFIX/bin/tritium"
+WRAPPER="$PREFIX/bin/hdr"
 if [[ "$DO_INSTALL" -eq 1 ]]; then
   cat >"$WRAPPER" <<'EOF'
 #!/usr/bin/env bash
@@ -166,10 +165,10 @@ EOF
 fi
 
 echo
-echo "✅ Done."
+echo "Done."
 echo "Prefix:  $PREFIX"
 echo "Encoder: $PREFIX/bin/SvtAv1EncApp"
-echo "Wrapper: $PREFIX/bin/tritium"
+echo "Wrapper: $PREFIX/bin/hdr"
 if [[ "$USE_TEMP_WORKDIR" -eq 1 ]]; then
   if [[ "$KEEP_WORKDIR" -eq 1 ]]; then
     echo "Workspace kept: $TEMP_ROOT"

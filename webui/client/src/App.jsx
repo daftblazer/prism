@@ -756,9 +756,9 @@ const QueueSection = ({ queue }) => {
 };
 
 const ENCODER_DESCRIPTIONS = {
-  '5fish': { title: '5fish PSY', description: 'Community fork of SVT-AV1 with perceptual quality optimizations. Adds psychovisual tuning options for improved visual fidelity at lower bitrates, including custom tune modes and bias controls.', repo: 'github.com/5fish/svt-av1-psy' },
-  'tritium': { title: 'Tritium', description: 'Lightweight SVT-AV1 fork focused on speed and efficiency improvements. Targets faster encoding with minimal quality loss through optimized preset configurations and threading.', repo: 'github.com/Uranite/svt-av1-tritium' },
-  'essential': { title: 'Essential', description: 'SVT-AV1 fork with curated patches for essential quality-of-life improvements. Provides a stable, opinionated build with select enhancements from the PSY community.', repo: 'github.com/nekotrix/SVT-AV1-Essential' },
+  '5fish': { title: '5fish PSY', description: 'SVT-AV1 fork best tuned for anime content. Psychovisual optimizations deliver superior visual fidelity on animated sources at lower bitrates, with custom tune modes and bias controls.', repo: 'github.com/5fish/svt-av1-psy' },
+  'hdr': { title: 'HDR', description: 'SVT-AV1 fork optimized for live-action and HDR content. Includes improvements for high dynamic range encoding, tone mapping, and perceptual quality tuning for real-world footage.', repo: 'github.com/juliobbv-p/svt-av1-hdr' },
+  'essential': { title: 'Essential', description: 'Easy-to-use SVT-AV1 fork that works well for any content. Provides a stable, opinionated build with sensible defaults and curated quality-of-life improvements.', repo: 'github.com/nekotrix/SVT-AV1-Essential' },
 };
 
 const EncodersSection = ({ encoders, buildEncoder, buildLogs }) => {
