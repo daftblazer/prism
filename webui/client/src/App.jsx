@@ -5,7 +5,8 @@ import {
   Plus, List, Cpu, Activity, Folder, X, Terminal, Square,
   RefreshCcw, CheckCircle2, Clock, AlertCircle, CornerLeftUp, HardDrive,
   Settings, Wrench, Play, Search, StopCircle, FileVideo, File, Star,
-  FlaskConical, Trash2, HelpCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Columns, Image, Pause
+  FlaskConical, Trash2, HelpCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Columns, Image, Pause,
+  Music, Save, Edit3, AlertTriangle
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -1000,6 +1001,168 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
   );
 };
 
+const AudioScanner = ({ favorites, toggleFavorite }) => {
+  const [browsePath, setBrowsePath] = useState('/');
+  const [browseItems, setBrowseItems] = useState([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [selectedDir, setSelectedDir] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [results, setResults] = useState(null);
+  const [expandedFile, setExpandedFile] = useState(null);
+  const [editedNames, setEditedNames] = useState({});
+  const [saving, setSaving] = useState({});
+
+  useEffect(() => {
+    setBrowseLoading(true);
+    axios.get(`/api/browse?path=${encodeURIComponent(browsePath)}`).then(r => setBrowseItems(r.data)).catch(console.error).finally(() => setBrowseLoading(false));
+  }, [browsePath]);
+
+  const handleScan = async () => {
+    if (!selectedDir) return;
+    setScanning(true);
+    setResults(null);
+    setExpandedFile(null);
+    setEditedNames({});
+    try {
+      const res = await axios.get(`/api/audio-scanner/scan?dir=${encodeURIComponent(selectedDir)}`);
+      setResults(res.data);
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setScanning(false); }
+  };
+
+  const handleExpand = (filePath) => {
+    if (expandedFile === filePath) { setExpandedFile(null); return; }
+    setExpandedFile(filePath);
+    const file = results?.files?.find(f => f.path === filePath);
+    if (file) {
+      const names = {};
+      file.audioTracks.forEach(t => { names[t.index] = t.name; });
+      setEditedNames(prev => ({ ...prev, [filePath]: names }));
+    }
+  };
+
+  const handleNameChange = (filePath, trackIndex, value) => {
+    setEditedNames(prev => ({ ...prev, [filePath]: { ...(prev[filePath] || {}), [trackIndex]: value } }));
+  };
+
+  const handleSave = async (filePath) => {
+    const names = editedNames[filePath];
+    if (!names) return;
+    const tracks = Object.entries(names).map(([index, name]) => ({ index: Number(index), name }));
+    setSaving(prev => ({ ...prev, [filePath]: true }));
+    try {
+      await axios.post('/api/audio-scanner/rename', { file: filePath, tracks });
+      setResults(prev => {
+        if (!prev) return prev;
+        const files = prev.files.map(f => f.path === filePath ? { ...f, audioTracks: f.audioTracks.map(t => ({ ...t, name: names[t.index] ?? t.name })) } : f);
+        return { ...prev, files };
+      });
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setSaving(prev => ({ ...prev, [filePath]: false })); }
+  };
+
+  const hasChanges = (filePath) => {
+    const file = results?.files?.find(f => f.path === filePath);
+    const names = editedNames[filePath];
+    if (!file || !names) return false;
+    return file.audioTracks.some(t => names[t.index] !== undefined && names[t.index] !== t.name);
+  };
+
+  const langLabel = (code) => ({ eng: 'English', jpn: 'Japanese', und: 'Undefined', ger: 'German', deu: 'German', fre: 'French', fra: 'French', spa: 'Spanish', ita: 'Italian', por: 'Portuguese', rus: 'Russian', kor: 'Korean', zho: 'Chinese', chi: 'Chinese', ara: 'Arabic' }[code] || code);
+
+  return (
+    <div className="flex gap-4 h-[calc(100vh-8rem)]">
+      {/* File Browser */}
+      <div className="w-80 shrink-0 border border-sf flex flex-col bg-void overflow-hidden">
+        <div className="px-4 py-3 border-b border-sf bg-void-panel">
+          <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">Select Directory</h3>
+        </div>
+        <FileBrowser currentPath={browsePath} onNavigate={(p) => { setBrowsePath(p); setSelectedDir(p); }} onSelect={setSelectedDir} items={browseItems} loading={browseLoading} favorites={favorites} onToggleFavorite={toggleFavorite} />
+        <div className="p-3 border-t border-sf bg-void-panel space-y-2">
+          <div className="text-[14px] font-sys font-bold text-steel-dim truncate">{selectedDir || 'No directory selected'}</div>
+          <button onClick={handleScan} disabled={!selectedDir || scanning} className={cn("w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs transition-all active:scale-95 tracking-wider uppercase", !selectedDir || scanning ? "bg-steel-dim/30 text-steel-dim cursor-not-allowed" : "bg-nerv text-black hover:bg-nerv-hot")}>
+            <Search className="w-3.5 h-3.5" /> {scanning ? 'Scanning...' : 'Scan Audio Tracks'}
+          </button>
+        </div>
+      </div>
+
+      {/* Results */}
+      <div className="flex-1 border border-sf flex flex-col bg-void-panel overflow-hidden">
+        <div className="px-4 py-3 border-b border-sf flex items-center justify-between bg-void">
+          <div className="flex items-center gap-3">
+            <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">Scan Results</h3>
+            {results && (
+              <span className="text-[14px] font-sys font-bold text-steel-dim">
+                {results.totalFiles} files — baseline: {results.baseline} audio tracks
+              </span>
+            )}
+          </div>
+          {results && results.extraCount > 0 && (
+            <span className="flex items-center gap-1.5 text-[14px] font-bold uppercase px-2.5 py-1 bg-nerv/15 text-nerv">
+              <AlertTriangle className="w-3 h-3" /> {results.extraCount} with extra tracks
+            </span>
+          )}
+        </div>
+        <div className="flex-1 overflow-auto">
+          {!results && !scanning && (
+            <div className="flex items-center justify-center h-full text-steel-dim/50 text-xs font-bold uppercase tracking-widest">Select a directory and scan to analyze audio tracks</div>
+          )}
+          {scanning && (
+            <div className="flex items-center justify-center h-full text-nerv text-xs font-bold uppercase tracking-widest animate-pulse">Scanning files...</div>
+          )}
+          {results && results.files.map(file => (
+            <div key={file.path} className={cn("border-b border-sf", file.hasExtra && "bg-nerv/[0.03]")}>
+              <div onClick={() => handleExpand(file.path)} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-steel/[0.05] transition-all">
+                <FileVideo className={cn("w-4 h-4 shrink-0", file.hasExtra ? "text-nerv" : "text-steel-dim")} />
+                <span className="flex-1 text-xs font-bold text-steel truncate">{file.name}</span>
+                <span className={cn("text-[14px] font-bold font-sys tabular-nums", file.hasExtra ? "text-nerv" : "text-steel-dim")}>
+                  {file.audioTracks.length} track{file.audioTracks.length !== 1 ? 's' : ''}
+                </span>
+                {file.hasExtra && <span className="text-[14px] font-bold uppercase px-2 py-0.5 bg-nerv/15 text-nerv">Extra</span>}
+                {file.hasFewer && <span className="text-[14px] font-bold uppercase px-2 py-0.5 bg-wire-cyan/15 text-wire-cyan">Fewer</span>}
+                <ChevronDown className={cn("w-3.5 h-3.5 text-steel-dim transition-transform", expandedFile === file.path && "rotate-180")} />
+              </div>
+              {expandedFile === file.path && (
+                <div className="px-4 pb-4 space-y-2">
+                  <div className="border border-sf bg-void">
+                    <div className="grid grid-cols-[40px_1fr_1fr_100px_60px] gap-0 text-[14px] font-bold uppercase tracking-widest text-nerv px-3 py-2 border-b border-sf">
+                      <span>#</span><span>Language</span><span>Track Name</span><span>Codec</span><span>Ch</span>
+                    </div>
+                    {file.audioTracks.map((track, i) => {
+                      const isExtra = i >= results.baseline;
+                      return (
+                        <div key={track.index} className={cn("grid grid-cols-[40px_1fr_1fr_100px_60px] gap-0 items-center px-3 py-2 border-b border-sf last:border-b-0", isExtra && "bg-nerv/[0.06]")}>
+                          <span className={cn("text-[14px] font-bold font-sys", isExtra ? "text-nerv" : "text-steel-dim")}>{track.index}</span>
+                          <span className="text-xs font-bold text-steel">{langLabel(track.language)} <span className="text-steel-dim">({track.language})</span></span>
+                          <input
+                            type="text"
+                            value={editedNames[file.path]?.[track.index] ?? track.name}
+                            onChange={e => handleNameChange(file.path, track.index, e.target.value)}
+                            placeholder="(no name)"
+                            className={cn("border bg-void px-2 py-1.5 text-xs font-bold font-sys text-steel w-full", isExtra ? "border-nerv/30" : "border-sf")}
+                          />
+                          <span className="text-[14px] font-sys text-steel-dim">{track.codec}</span>
+                          <span className="text-[14px] font-sys text-steel-dim">{track.channels}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => handleSave(file.path)} disabled={!hasChanges(file.path) || saving[file.path]} className={cn("flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase transition-all", hasChanges(file.path) ? "bg-nerv text-black hover:bg-nerv-hot" : "bg-steel-dim/20 text-steel-dim cursor-not-allowed")}>
+                      <Save className="w-3 h-3" /> {saving[file.path] ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    {hasChanges(file.path) && <span className="text-[14px] text-nerv-dim font-bold">Unsaved changes</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TOOL_CATEGORIES = [
   { id: 'all', label: 'All' },
   { id: 'audio', label: 'Audio' },
@@ -1929,6 +2092,7 @@ const App = () => {
           <NavItem icon={<List className="w-3.5 h-3.5" />} label="Queue" active={activeTab === 'queue'} onClick={() => setActiveTab('queue')} />
           <NavItem icon={<Cpu className="w-3.5 h-3.5" />} label="Encoders" active={activeTab === 'encoders'} onClick={() => setActiveTab('encoders')} />
           <NavItem icon={<Wrench className="w-3.5 h-3.5" />} label="Tools" active={activeTab === 'tools'} onClick={() => setActiveTab('tools')} />
+          <NavItem icon={<Music className="w-3.5 h-3.5" />} label="Audio" active={activeTab === 'audio'} onClick={() => setActiveTab('audio')} />
           <NavItem icon={<FlaskConical className="w-3.5 h-3.5" />} label="Compare" active={activeTab === 'compare'} onClick={() => setActiveTab('compare')} />
           <NavItem icon={<Settings className="w-3.5 h-3.5" />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
         </nav>
@@ -1958,6 +2122,7 @@ const App = () => {
           <div className="flex-1 overflow-auto p-6 max-w-[1800px] mx-auto w-full">
             {activeTab === 'queue' && <QueueSection queue={queue} />}
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
+            {activeTab === 'audio' && <AudioScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
             {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}
             {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} systemMetrics={systemMetrics} />}
           </div>

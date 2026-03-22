@@ -908,6 +908,81 @@ app.post('/api/favorites/toggle', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- Audio Scanner API ---
+app.get('/api/audio-scanner/scan', async (req, res) => {
+  const dir = req.query.dir;
+  if (!dir) return res.status(400).json({ error: 'dir required' });
+  try {
+    const entries = await fs.readdir(dir);
+    const mkvFiles = entries.filter(f => f.toLowerCase().endsWith('.mkv')).sort();
+    if (mkvFiles.length === 0) return res.status(404).json({ error: 'No MKV files found in directory' });
+
+    const probeFile = (file) => new Promise((resolve, reject) => {
+      const filePath = path.join(dir, file);
+      const proc = spawn('mkvmerge', ['-J', filePath]);
+      let out = '';
+      proc.stdout.on('data', d => out += d.toString());
+      proc.on('close', code => {
+        if (code !== 0) return reject(new Error(`mkvmerge failed for ${file}`));
+        try { resolve({ file, filePath, data: JSON.parse(out) }); } catch { reject(new Error(`Parse failed for ${file}`)); }
+      });
+    });
+
+    // Probe up to 4 files at a time
+    const results = [];
+    for (let i = 0; i < mkvFiles.length; i += 4) {
+      const batch = mkvFiles.slice(i, i + 4).map(f => probeFile(f).catch(err => ({ file: f, filePath: path.join(dir, f), error: err.message })));
+      results.push(...await Promise.all(batch));
+    }
+
+    const files = results.map(r => {
+      if (r.error) return { path: r.filePath, name: r.file, audioTracks: [], error: r.error };
+      let audioIdx = 0;
+      const audioTracks = (r.data.tracks || []).filter(t => t.type === 'audio').map(t => ({
+        index: ++audioIdx,
+        id: t.id,
+        language: t.properties?.language || 'und',
+        name: t.properties?.track_name || '',
+        codec: t.codec || '',
+        channels: t.properties?.audio_channels || 0,
+      }));
+      return { path: r.filePath, name: r.file, audioTracks };
+    });
+
+    // Baseline = most common audio track count
+    const counts = files.filter(f => !f.error).map(f => f.audioTracks.length);
+    const freq = {};
+    counts.forEach(c => freq[c] = (freq[c] || 0) + 1);
+    const baseline = Number(Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || 0);
+
+    files.forEach(f => { f.hasExtra = f.audioTracks.length > baseline; f.hasFewer = f.audioTracks.length < baseline; });
+    // Sort: extra first, then fewer, then normal
+    files.sort((a, b) => (b.hasExtra - a.hasExtra) || (b.hasFewer - a.hasFewer) || a.name.localeCompare(b.name));
+
+    res.json({ baseline, totalFiles: files.length, extraCount: files.filter(f => f.hasExtra).length, files });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/audio-scanner/rename', async (req, res) => {
+  const { file, tracks } = req.body;
+  if (!file || !tracks || !Array.isArray(tracks)) return res.status(400).json({ error: 'file and tracks[] required' });
+
+  const args = [file];
+  for (const t of tracks) {
+    args.push('--edit', `track:a${t.index}`, '--set', `name=${t.name}`);
+  }
+
+  try {
+    await new Promise((resolve, reject) => {
+      const proc = spawn('mkvpropedit', args);
+      let stderr = '';
+      proc.stderr.on('data', d => stderr += d.toString());
+      proc.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || 'mkvpropedit failed')));
+    });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // --- Tools API ---
 app.get('/api/tools', async (req, res) => {
   try { const registry = await fs.readJson(TOOL_REGISTRY_FILE); res.json(registry); } catch (err) { res.status(500).json({ error: err.message }); }
