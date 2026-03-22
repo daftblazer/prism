@@ -1115,6 +1115,33 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
     finally { setSaving(prev => ({ ...prev, [filePath]: false })); }
   };
 
+  const handleSaveAll = async () => {
+    if (!results || !expandedFile) return;
+    const names = editedNames[expandedFile];
+    if (!names) return;
+    const allFiles = results.files;
+    if (!confirm(`Apply these track names to all ${allFiles.length} files?`)) return;
+    setSaving(prev => ({ ...prev, _all: true }));
+    try {
+      for (const f of allFiles) {
+        const tracks = Object.entries(names)
+          .filter(([idx]) => Number(idx) <= f.audioTracks.length)
+          .map(([index, name]) => ({ index: Number(index), name }));
+        if (tracks.length === 0) continue;
+        await axios.post('/api/audio-scanner/rename', { file: f.path, tracks });
+      }
+      setResults(prev => {
+        if (!prev) return prev;
+        const files = prev.files.map(f => ({
+          ...f,
+          audioTracks: f.audioTracks.map(t => ({ ...t, name: names[t.index] ?? t.name })),
+        }));
+        return { ...prev, files };
+      });
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setSaving(prev => ({ ...prev, _all: false })); }
+  };
+
   const hasChanges = (filePath) => {
     const file = results?.files?.find(f => f.path === filePath);
     const names = editedNames[filePath];
@@ -1326,6 +1353,11 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
                       <button onClick={() => handleSave(file.path)} disabled={!hasChanges(file.path) || saving[file.path]} className={cn("flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase transition-all", hasChanges(file.path) ? "bg-nerv text-black hover:bg-nerv-hot" : "bg-steel-dim/20 text-steel-dim cursor-not-allowed")}>
                         <Save className="w-3 h-3" /> {saving[file.path] ? 'Saving...' : 'Save Names'}
                       </button>
+                      {hasChanges(file.path) && (
+                        <button onClick={handleSaveAll} disabled={saving._all} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase border border-nerv/50 text-nerv hover:bg-nerv/10 transition-all">
+                          {saving._all ? 'Applying...' : 'Apply Names to All Files'}
+                        </button>
+                      )}
                       {getUncheckedCount(file.path) > 0 && (<>
                         <button onClick={() => handleRemoveTracks(file.path)} disabled={removing[file.path]} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase bg-alert-red/90 text-white hover:bg-alert-red transition-all">
                           <Trash2 className="w-3 h-3" /> {removing[file.path] ? 'Removing...' : `Remove ${getUncheckedCount(file.path)} Unchecked`}
@@ -1334,7 +1366,7 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
                           {removing._all ? 'Applying...' : 'Apply to All Files'}
                         </button>
                       </>)}
-                      {hasChanges(file.path) && <span className="text-[14px] text-nerv-dim font-bold">Unsaved changes</span>}
+                      {hasChanges(file.path) && !saving._all && <span className="text-[14px] text-nerv-dim font-bold">Unsaved changes</span>}
                     </div>
                   </div>
                 )}
