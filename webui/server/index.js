@@ -701,14 +701,18 @@ class Worker {
       child.stderr.on('data', (d) => { const out = d.toString(); this.log(`${slotPrefix}${out}`, 'stderr'); parseOutput(out); });
 
       child.on('close', (code) => {
-        if (code !== 0) {
+        if (code !== 0 && code !== null) {
           this.log(`${slotPrefix}ENCODE FAILED — ${path.basename(file)} — exit code ${code}`, 'error');
-          sendWebhookNotification('encode_error', {
-            timestamp: new Date().toISOString(),
-            folder: path.basename(batch.input_folder),
-            file: path.basename(file),
-            exitCode: code,
-          });
+          if (!this.stopping) {
+            sendWebhookNotification('encode_error', {
+              timestamp: new Date().toISOString(),
+              folder: path.basename(batch.input_folder),
+              file: path.basename(file),
+              exitCode: code,
+            });
+          }
+        } else if (code !== 0) {
+          this.log(`${slotPrefix}ENCODE FAILED — ${path.basename(file)} — exit code ${code}`, 'error');
         } else {
           this.log(`${slotPrefix}ENCODE COMPLETE — ${path.basename(file)} — all systems nominal`, 'info');
         }
