@@ -1001,7 +1001,11 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
   );
 };
 
-const AudioScanner = ({ favorites, toggleFavorite }) => {
+const AUDIO_TAB_TOOL_IDS = ['swap_audio_order', 'shift_audio_offset', 'set_default_audio', 'strip_compat_audio', 'keep_japanese_audio', 'mux_in_english', 'mux_commentary', 'rename_tracks', 'mux_audio_tracks'];
+
+const AUDIO_TOOL_STRIP_IDS = ['rename_tracks', 'set_default_audio', 'swap_audio_order', 'shift_audio_offset', 'mux_audio_tracks'];
+
+const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolStatus, toolLogRef, appSettings }) => {
   const [browsePath, setBrowsePath] = useState('/');
   const [browseItems, setBrowseItems] = useState([]);
   const [browseLoading, setBrowseLoading] = useState(false);
@@ -1011,11 +1015,53 @@ const AudioScanner = ({ favorites, toggleFavorite }) => {
   const [expandedFile, setExpandedFile] = useState(null);
   const [editedNames, setEditedNames] = useState({});
   const [saving, setSaving] = useState({});
+  const [checkedTracks, setCheckedTracks] = useState({});
+  const [removing, setRemoving] = useState({});
+  const [audioTools, setAudioTools] = useState([]);
+  const [activeTool, setActiveTool] = useState(null);
+  const [toolEnv, setToolEnv] = useState({});
+  const [activePathVar, setActivePathVar] = useState(null);
+  const [toolAutoScroll, setToolAutoScroll] = useState(true);
+  // Mux tool: probe source dir
+  const [muxSourceTracks, setMuxSourceTracks] = useState([]);
+  const [muxSelectedIndices, setMuxSelectedIndices] = useState({});
+  const [muxTrackNames, setMuxTrackNames] = useState({});
+  const [probingMuxSource, setProbingMuxSource] = useState(false);
+  // set_default_audio: probe tracks
+  const [defaultAudioTracks, setDefaultAudioTracks] = useState([]);
+  const [probingDefault, setProbingDefault] = useState(false);
 
   useEffect(() => {
     setBrowseLoading(true);
     axios.get(`/api/browse?path=${encodeURIComponent(browsePath)}`).then(r => setBrowseItems(r.data)).catch(console.error).finally(() => setBrowseLoading(false));
   }, [browsePath]);
+
+  useEffect(() => {
+    axios.get('/api/tools').then(r => {
+      setAudioTools(r.data.filter(t => AUDIO_TOOL_STRIP_IDS.includes(t.id)));
+    }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (toolAutoScroll && toolLogRef.current) toolLogRef.current.scrollTop = toolLogRef.current.scrollHeight;
+  }, [toolLogs, toolAutoScroll, toolLogRef]);
+
+  // Probe for set_default_audio when dir changes and that tool is active
+  useEffect(() => {
+    if (activeTool?.id !== 'set_default_audio' || !selectedDir) { setDefaultAudioTracks([]); return; }
+    setProbingDefault(true);
+    axios.get(`/api/tools/probe?path=${encodeURIComponent(selectedDir)}`)
+      .then(res => {
+        const tracks = (res.data.tracks || []).filter(t => t.type === 'audio').map((t, i) => ({
+          index: i + 1, lang: t.properties?.language || 'und', name: t.properties?.track_name || '',
+          codec: t.codec || '', channels: t.properties?.audio_channels || '?',
+        }));
+        setDefaultAudioTracks(tracks);
+        if (tracks.length > 0) setToolEnv(prev => ({ ...prev, AUDIO_CHOICE: prev.AUDIO_CHOICE || String(tracks[0].index) }));
+      })
+      .catch(() => setDefaultAudioTracks([]))
+      .finally(() => setProbingDefault(false));
+  }, [activeTool?.id, selectedDir]);
 
   const handleScan = async () => {
     if (!selectedDir) return;
@@ -1023,9 +1069,14 @@ const AudioScanner = ({ favorites, toggleFavorite }) => {
     setResults(null);
     setExpandedFile(null);
     setEditedNames({});
+    setCheckedTracks({});
     try {
       const res = await axios.get(`/api/audio-scanner/scan?dir=${encodeURIComponent(selectedDir)}`);
       setResults(res.data);
+      // Init all tracks as checked
+      const checks = {};
+      res.data.files.forEach(f => { checks[f.path] = {}; f.audioTracks.forEach(t => { checks[f.path][t.id] = true; }); });
+      setCheckedTracks(checks);
     } catch (e) { alert(e.response?.data?.error || e.message); }
     finally { setScanning(false); }
   };
@@ -1068,16 +1119,149 @@ const AudioScanner = ({ favorites, toggleFavorite }) => {
     return file.audioTracks.some(t => names[t.index] !== undefined && names[t.index] !== t.name);
   };
 
+  const toggleTrackCheck = (filePath, trackId) => {
+    setCheckedTracks(prev => ({ ...prev, [filePath]: { ...(prev[filePath] || {}), [trackId]: !(prev[filePath]?.[trackId]) } }));
+  };
+
+  const getUncheckedCount = (filePath) => {
+    const checks = checkedTracks[filePath];
+    if (!checks) return 0;
+    return Object.values(checks).filter(v => !v).length;
+  };
+
+  const handleRemoveTracks = async (filePath) => {
+    const checks = checkedTracks[filePath];
+    if (!checks) return;
+    const keepIds = Object.entries(checks).filter(([, v]) => v).map(([id]) => Number(id));
+    if (keepIds.length === 0) return alert('Cannot remove all audio tracks');
+    setRemoving(prev => ({ ...prev, [filePath]: true }));
+    try {
+      await axios.post('/api/audio-scanner/remove-tracks', { file: filePath, keepTrackIds: keepIds });
+      await handleScan(); // rescan to reflect changes
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setRemoving(prev => ({ ...prev, [filePath]: false })); }
+  };
+
+  const handleRemoveAll = async () => {
+    if (!results || !expandedFile) return;
+    const checks = checkedTracks[expandedFile];
+    if (!checks) return;
+    // Get which indices (0-based position) are checked
+    const file = results.files.find(f => f.path === expandedFile);
+    if (!file) return;
+    const keepIndices = file.audioTracks.map((t, i) => checks[t.id] ? i : -1).filter(i => i >= 0);
+    if (keepIndices.length === 0) return alert('Cannot remove all audio tracks');
+    const allFiles = results.files.map(f => f.path);
+    if (!confirm(`Remove unchecked track positions from all ${allFiles.length} files?`)) return;
+    setRemoving(prev => ({ ...prev, _all: true }));
+    try {
+      await axios.post('/api/audio-scanner/remove-tracks', { files: allFiles, keepIndices });
+      await handleScan();
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setRemoving(prev => ({ ...prev, _all: false })); }
+  };
+
+  // Tool strip
+  const selectTool = (tool) => {
+    if (activeTool?.id === tool.id) { setActiveTool(null); setActivePathVar(null); return; }
+    setActiveTool(tool);
+    const init = {};
+    const pathVars = tool.envVars.filter(v => v.type === 'path');
+    tool.envVars.forEach(v => {
+      if (v.type === 'path') {
+        // Auto-fill first path var from selectedDir
+        if (v === pathVars[0]) init[v.name] = selectedDir;
+        else init[v.name] = v.default || '';
+      } else if (v.name === 'VIDEO_NAME' && appSettings?.releaseGroup) init[v.name] = `${appSettings.releaseGroup} AV1`;
+      else init[v.name] = v.default || '';
+    });
+    setToolEnv(init);
+    setActivePathVar(pathVars.length > 1 ? pathVars[0].name : null);
+    setMuxSourceTracks([]);
+    setMuxSelectedIndices({});
+    setMuxTrackNames({});
+  };
+
+  const handleBrowseNav = (p) => {
+    setBrowsePath(p);
+    if (!activeTool || !activePathVar) {
+      setSelectedDir(p);
+    } else {
+      setToolEnv(prev => ({ ...prev, [activePathVar]: p }));
+    }
+  };
+
+  const handleBrowseSelect = (p) => {
+    if (!activeTool || !activePathVar) {
+      setSelectedDir(p);
+    } else {
+      setToolEnv(prev => ({ ...prev, [activePathVar]: p }));
+    }
+  };
+
+  const probeMuxSource = async () => {
+    const sourceDir = toolEnv.SOURCE_DIR;
+    if (!sourceDir) return;
+    setProbingMuxSource(true);
+    try {
+      const res = await axios.get(`/api/tools/probe?path=${encodeURIComponent(sourceDir)}`);
+      const tracks = (res.data.tracks || []).filter(t => t.type === 'audio').map((t, i) => ({
+        index: i, id: t.id, lang: t.properties?.language || 'und', name: t.properties?.track_name || '',
+        codec: t.codec || '', channels: t.properties?.audio_channels || '?',
+      }));
+      setMuxSourceTracks(tracks);
+    } catch (e) { setMuxSourceTracks([]); alert(e.response?.data?.error || e.message); }
+    finally { setProbingMuxSource(false); }
+  };
+
+  const handleRunTool = async () => {
+    if (!activeTool) return;
+    const env = { ...toolEnv };
+    // For mux_audio_tracks, build TRACK_INDICES and TRACK_NAMES from selections
+    if (activeTool.id === 'mux_audio_tracks') {
+      const indices = Object.entries(muxSelectedIndices).filter(([, v]) => v).map(([k]) => k);
+      if (indices.length === 0) return alert('Select at least one track to mux');
+      env.TRACK_INDICES = indices.join(',');
+      env.TRACK_NAMES = indices.map(i => muxTrackNames[i] || '').join('|');
+      if (!env.TARGET_DIR) env.TARGET_DIR = selectedDir;
+    }
+    // Auto-fill DIR from selectedDir for single-dir tools
+    const tool = activeTool;
+    const dirVar = tool.envVars.find(v => v.type === 'path');
+    if (dirVar && !env[dirVar.name]) env[dirVar.name] = selectedDir;
+
+    Object.keys(env).forEach(k => { if (env[k] === '') delete env[k]; });
+    setToolLogs([]);
+    try {
+      await axios.post(`/api/tools/${tool.id}/run`, { env });
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+  };
+
+  const stopTool = async () => { try { await axios.post(`/api/tools/${activeTool?.id || 'unknown'}/stop`); } catch (e) { console.error(e); } };
+
   const langLabel = (code) => ({ eng: 'English', jpn: 'Japanese', und: 'Undefined', ger: 'German', deu: 'German', fre: 'French', fra: 'French', spa: 'Spanish', ita: 'Italian', por: 'Portuguese', rus: 'Russian', kor: 'Korean', zho: 'Chinese', chi: 'Chinese', ara: 'Arabic' }[code] || code);
+  const inputCls = "w-full border border-sf bg-void p-2.5 text-xs font-bold text-steel font-sys";
+
+  const toolPathVars = activeTool ? activeTool.envVars.filter(v => v.type === 'path') : [];
+  const toolNonPathVars = activeTool ? activeTool.envVars.filter(v => v.type !== 'path' && v.name !== 'DRY_RUN' && v.name !== 'TRACK_INDICES' && v.name !== 'TRACK_NAMES') : [];
 
   return (
     <div className="flex gap-4 h-[calc(100vh-8rem)]">
       {/* File Browser */}
       <div className="w-80 shrink-0 border border-sf flex flex-col bg-void overflow-hidden">
         <div className="px-4 py-3 border-b border-sf bg-void-panel">
-          <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">Select Directory</h3>
+          <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">
+            {activePathVar ? `Select: ${activeTool?.envVars.find(v => v.name === activePathVar)?.label || activePathVar}` : 'Select Directory'}
+          </h3>
         </div>
-        <FileBrowser currentPath={browsePath} onNavigate={(p) => { setBrowsePath(p); setSelectedDir(p); }} onSelect={setSelectedDir} items={browseItems} loading={browseLoading} favorites={favorites} onToggleFavorite={toggleFavorite} />
+        {toolPathVars.length > 1 && (
+          <div className="px-3 py-2 border-b border-sf flex gap-1.5 flex-wrap bg-void-panel">
+            {toolPathVars.map(v => (
+              <button key={v.name} onClick={() => setActivePathVar(v.name)} className={cn("px-2 py-1 text-[14px] font-bold uppercase transition-all", activePathVar === v.name ? "bg-nerv text-black" : "bg-void border border-sf text-steel-dim hover:text-nerv")}>{v.label.replace(' Directory', '')}</button>
+            ))}
+          </div>
+        )}
+        <FileBrowser currentPath={browsePath} onNavigate={handleBrowseNav} onSelect={handleBrowseSelect} items={browseItems} loading={browseLoading} favorites={favorites} onToggleFavorite={toggleFavorite} />
         <div className="p-3 border-t border-sf bg-void-panel space-y-2">
           <div className="text-[14px] font-sys font-bold text-steel-dim truncate">{selectedDir || 'No directory selected'}</div>
           <button onClick={handleScan} disabled={!selectedDir || scanning} className={cn("w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs transition-all active:scale-95 tracking-wider uppercase", !selectedDir || scanning ? "bg-steel-dim/30 text-steel-dim cursor-not-allowed" : "bg-nerv text-black hover:bg-nerv-hot")}>
@@ -1086,78 +1270,180 @@ const AudioScanner = ({ favorites, toggleFavorite }) => {
         </div>
       </div>
 
-      {/* Results */}
-      <div className="flex-1 border border-sf flex flex-col bg-void-panel overflow-hidden">
-        <div className="px-4 py-3 border-b border-sf flex items-center justify-between bg-void">
-          <div className="flex items-center gap-3">
-            <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">Scan Results</h3>
-            {results && (
-              <span className="text-[14px] font-sys font-bold text-steel-dim">
-                {results.totalFiles} files — baseline: {results.baseline} audio tracks
+      {/* Right panel */}
+      <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+        {/* Scan Results */}
+        <div className="flex-1 border border-sf flex flex-col bg-void-panel overflow-hidden min-h-0">
+          <div className="px-4 py-3 border-b border-sf flex items-center justify-between bg-void shrink-0">
+            <div className="flex items-center gap-3">
+              <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">Scan Results</h3>
+              {results && <span className="text-[14px] font-sys font-bold text-steel-dim">{results.totalFiles} files — baseline: {results.baseline} audio tracks</span>}
+            </div>
+            {results && results.extraCount > 0 && (
+              <span className="flex items-center gap-1.5 text-[14px] font-bold uppercase px-2.5 py-1 bg-nerv/15 text-nerv">
+                <AlertTriangle className="w-3 h-3" /> {results.extraCount} with extra tracks
               </span>
             )}
           </div>
-          {results && results.extraCount > 0 && (
-            <span className="flex items-center gap-1.5 text-[14px] font-bold uppercase px-2.5 py-1 bg-nerv/15 text-nerv">
-              <AlertTriangle className="w-3 h-3" /> {results.extraCount} with extra tracks
-            </span>
-          )}
-        </div>
-        <div className="flex-1 overflow-auto">
-          {!results && !scanning && (
-            <div className="flex items-center justify-center h-full text-steel-dim/50 text-xs font-bold uppercase tracking-widest">Select a directory and scan to analyze audio tracks</div>
-          )}
-          {scanning && (
-            <div className="flex items-center justify-center h-full text-nerv text-xs font-bold uppercase tracking-widest animate-pulse">Scanning files...</div>
-          )}
-          {results && results.files.map(file => (
-            <div key={file.path} className={cn("border-b border-sf", file.hasExtra && "bg-nerv/[0.03]")}>
-              <div onClick={() => handleExpand(file.path)} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-steel/[0.05] transition-all">
-                <FileVideo className={cn("w-4 h-4 shrink-0", file.hasExtra ? "text-nerv" : "text-steel-dim")} />
-                <span className="flex-1 text-xs font-bold text-steel truncate">{file.name}</span>
-                <span className={cn("text-[14px] font-bold font-sys tabular-nums", file.hasExtra ? "text-nerv" : "text-steel-dim")}>
-                  {file.audioTracks.length} track{file.audioTracks.length !== 1 ? 's' : ''}
-                </span>
-                {file.hasExtra && <span className="text-[14px] font-bold uppercase px-2 py-0.5 bg-nerv/15 text-nerv">Extra</span>}
-                {file.hasFewer && <span className="text-[14px] font-bold uppercase px-2 py-0.5 bg-wire-cyan/15 text-wire-cyan">Fewer</span>}
-                <ChevronDown className={cn("w-3.5 h-3.5 text-steel-dim transition-transform", expandedFile === file.path && "rotate-180")} />
-              </div>
-              {expandedFile === file.path && (
-                <div className="px-4 pb-4 space-y-2">
-                  <div className="border border-sf bg-void">
-                    <div className="grid grid-cols-[40px_1fr_1fr_100px_60px] gap-0 text-[14px] font-bold uppercase tracking-widest text-nerv px-3 py-2 border-b border-sf">
-                      <span>#</span><span>Language</span><span>Track Name</span><span>Codec</span><span>Ch</span>
+          <div className="flex-1 overflow-auto">
+            {!results && !scanning && <div className="flex items-center justify-center h-full text-steel-dim/50 text-xs font-bold uppercase tracking-widest">Select a directory and scan to analyze audio tracks</div>}
+            {scanning && <div className="flex items-center justify-center h-full text-nerv text-xs font-bold uppercase tracking-widest animate-pulse">Scanning files...</div>}
+            {results && results.files.map(file => (
+              <div key={file.path} className={cn("border-b border-sf", file.hasExtra && "bg-nerv/[0.03]")}>
+                <div onClick={() => handleExpand(file.path)} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-steel/[0.05] transition-all">
+                  <FileVideo className={cn("w-4 h-4 shrink-0", file.hasExtra ? "text-nerv" : "text-steel-dim")} />
+                  <span className="flex-1 text-xs font-bold text-steel truncate">{file.name}</span>
+                  <span className={cn("text-[14px] font-bold font-sys tabular-nums", file.hasExtra ? "text-nerv" : "text-steel-dim")}>{file.audioTracks.length} track{file.audioTracks.length !== 1 ? 's' : ''}</span>
+                  {file.hasExtra && <span className="text-[14px] font-bold uppercase px-2 py-0.5 bg-nerv/15 text-nerv">Extra</span>}
+                  {file.hasFewer && <span className="text-[14px] font-bold uppercase px-2 py-0.5 bg-wire-cyan/15 text-wire-cyan">Fewer</span>}
+                  <ChevronDown className={cn("w-3.5 h-3.5 text-steel-dim transition-transform", expandedFile === file.path && "rotate-180")} />
+                </div>
+                {expandedFile === file.path && (
+                  <div className="px-4 pb-4 space-y-2">
+                    <div className="border border-sf bg-void">
+                      <div className="grid grid-cols-[32px_40px_1fr_1fr_100px_60px] gap-0 text-[14px] font-bold uppercase tracking-widest text-nerv px-3 py-2 border-b border-sf">
+                        <span></span><span>#</span><span>Language</span><span>Track Name</span><span>Codec</span><span>Ch</span>
+                      </div>
+                      {file.audioTracks.map((track, i) => {
+                        const isExtra = i >= results.baseline;
+                        const isChecked = checkedTracks[file.path]?.[track.id] ?? true;
+                        return (
+                          <div key={track.index} className={cn("grid grid-cols-[32px_40px_1fr_1fr_100px_60px] gap-0 items-center px-3 py-2 border-b border-sf last:border-b-0", isExtra && "bg-nerv/[0.06]", !isChecked && "opacity-40")}>
+                            <input type="checkbox" checked={isChecked} onChange={() => toggleTrackCheck(file.path, track.id)} className="w-4 h-4 accent-nerv" />
+                            <span className={cn("text-[14px] font-bold font-sys", isExtra ? "text-nerv" : "text-steel-dim")}>{track.index}</span>
+                            <span className="text-xs font-bold text-steel">{langLabel(track.language)} <span className="text-steel-dim">({track.language})</span></span>
+                            <input type="text" value={editedNames[file.path]?.[track.index] ?? track.name} onChange={e => handleNameChange(file.path, track.index, e.target.value)} placeholder="(no name)" className={cn("border bg-void px-2 py-1.5 text-xs font-bold font-sys text-steel w-full", isExtra ? "border-nerv/30" : "border-sf")} />
+                            <span className="text-[14px] font-sys text-steel-dim">{track.codec}</span>
+                            <span className="text-[14px] font-sys text-steel-dim">{track.channels}</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                    {file.audioTracks.map((track, i) => {
-                      const isExtra = i >= results.baseline;
-                      return (
-                        <div key={track.index} className={cn("grid grid-cols-[40px_1fr_1fr_100px_60px] gap-0 items-center px-3 py-2 border-b border-sf last:border-b-0", isExtra && "bg-nerv/[0.06]")}>
-                          <span className={cn("text-[14px] font-bold font-sys", isExtra ? "text-nerv" : "text-steel-dim")}>{track.index}</span>
-                          <span className="text-xs font-bold text-steel">{langLabel(track.language)} <span className="text-steel-dim">({track.language})</span></span>
-                          <input
-                            type="text"
-                            value={editedNames[file.path]?.[track.index] ?? track.name}
-                            onChange={e => handleNameChange(file.path, track.index, e.target.value)}
-                            placeholder="(no name)"
-                            className={cn("border bg-void px-2 py-1.5 text-xs font-bold font-sys text-steel w-full", isExtra ? "border-nerv/30" : "border-sf")}
-                          />
-                          <span className="text-[14px] font-sys text-steel-dim">{track.codec}</span>
-                          <span className="text-[14px] font-sys text-steel-dim">{track.channels}</span>
-                        </div>
-                      );
-                    })}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <button onClick={() => handleSave(file.path)} disabled={!hasChanges(file.path) || saving[file.path]} className={cn("flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase transition-all", hasChanges(file.path) ? "bg-nerv text-black hover:bg-nerv-hot" : "bg-steel-dim/20 text-steel-dim cursor-not-allowed")}>
+                        <Save className="w-3 h-3" /> {saving[file.path] ? 'Saving...' : 'Save Names'}
+                      </button>
+                      {getUncheckedCount(file.path) > 0 && (<>
+                        <button onClick={() => handleRemoveTracks(file.path)} disabled={removing[file.path]} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase bg-alert-red/90 text-white hover:bg-alert-red transition-all">
+                          <Trash2 className="w-3 h-3" /> {removing[file.path] ? 'Removing...' : `Remove ${getUncheckedCount(file.path)} Unchecked`}
+                        </button>
+                        <button onClick={handleRemoveAll} disabled={removing._all} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase border border-alert-red/50 text-alert-red hover:bg-alert-red/10 transition-all">
+                          {removing._all ? 'Applying...' : 'Apply to All Files'}
+                        </button>
+                      </>)}
+                      {hasChanges(file.path) && <span className="text-[14px] text-nerv-dim font-bold">Unsaved changes</span>}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => handleSave(file.path)} disabled={!hasChanges(file.path) || saving[file.path]} className={cn("flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase transition-all", hasChanges(file.path) ? "bg-nerv text-black hover:bg-nerv-hot" : "bg-steel-dim/20 text-steel-dim cursor-not-allowed")}>
-                      <Save className="w-3 h-3" /> {saving[file.path] ? 'Saving...' : 'Save Changes'}
-                    </button>
-                    {hasChanges(file.path) && <span className="text-[14px] text-nerv-dim font-bold">Unsaved changes</span>}
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Tool Strip + Inline Params */}
+        <div className="shrink-0 border border-sf bg-void-panel overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-sf flex items-center gap-2 flex-wrap bg-void">
+            <span className="text-[12px] font-bold uppercase tracking-widest text-nerv mr-2">Tools</span>
+            {audioTools.map(tool => (
+              <button key={tool.id} onClick={() => selectTool(tool)} className={cn("px-3 py-1.5 text-[14px] font-bold uppercase tracking-wider transition-all", activeTool?.id === tool.id ? "bg-nerv text-black" : "bg-void-panel border border-sf text-steel-dim hover:text-nerv hover:border-nerv-dim/30")}>
+                {tool.name}
+              </button>
+            ))}
+          </div>
+          {activeTool && (
+            <div className="p-4 space-y-3 border-b border-sf">
+              <p className="text-[14px] text-steel-dim">{activeTool.description}</p>
+              {/* Path vars as read-only displays */}
+              {toolPathVars.map(v => (
+                <div key={v.name} className="flex items-center gap-3">
+                  <span className="text-[14px] font-bold uppercase tracking-widest text-nerv w-40 shrink-0">{v.label}</span>
+                  <div className="flex-1 border border-sf bg-void px-2.5 py-1.5 text-xs font-bold font-sys text-steel-dim truncate cursor-pointer hover:border-nerv-dim/30" onClick={() => { setActivePathVar(v.name); if (toolEnv[v.name]) setBrowsePath(toolEnv[v.name]); }}>
+                    {toolEnv[v.name] || '(click to select)'}
                   </div>
                 </div>
+              ))}
+              {/* Non-path vars */}
+              <div className="grid grid-cols-2 gap-3">
+                {toolNonPathVars.map(v => (
+                  <div key={v.name} className="space-y-1">
+                    <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">{v.label}</label>
+                    {activeTool.id === 'set_default_audio' && v.name === 'AUDIO_CHOICE' ? (
+                      probingDefault ? (
+                        <div className="px-3 py-2.5 text-xs font-bold border border-sf bg-void text-steel-dim">Scanning...</div>
+                      ) : defaultAudioTracks.length > 0 ? (
+                        <select value={toolEnv.AUDIO_CHOICE || ''} onChange={e => setToolEnv(prev => ({ ...prev, AUDIO_CHOICE: e.target.value }))} className={inputCls}>
+                          {defaultAudioTracks.map(t => <option key={t.index} value={String(t.index)}>Track {t.index}: {t.lang} — {t.name || '(no name)'} ({t.codec}, {t.channels}ch)</option>)}
+                        </select>
+                      ) : (
+                        <div className="px-3 py-2.5 text-xs font-bold border border-sf bg-void text-steel-dim">Select a directory first</div>
+                      )
+                    ) : v.type === 'boolean' ? (
+                      <button onClick={() => setToolEnv(prev => ({ ...prev, [v.name]: prev[v.name] === '1' ? '0' : '1' }))} className={cn("px-3 py-2.5 text-xs font-bold border transition-all w-full text-left", toolEnv[v.name] === '1' ? "border-data-green/30 bg-data-green/10 text-data-green" : "border-sf bg-void text-steel-dim")}>
+                        {toolEnv[v.name] === '1' ? 'Enabled' : 'Disabled'}
+                      </button>
+                    ) : (
+                      <input type={v.type === 'number' ? 'number' : 'text'} value={toolEnv[v.name] || ''} onChange={e => setToolEnv(prev => ({ ...prev, [v.name]: e.target.value }))} placeholder={v.default || ''} className={inputCls} />
+                    )}
+                  </div>
+                ))}
+              </div>
+              {/* Mux tool: source track selection */}
+              {activeTool.id === 'mux_audio_tracks' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <button onClick={probeMuxSource} disabled={!toolEnv.SOURCE_DIR || probingMuxSource} className={cn("flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase border transition-all", toolEnv.SOURCE_DIR ? "border-sf bg-void text-steel hover:text-nerv hover:border-nerv-dim/30" : "border-sf bg-void text-steel-dim cursor-not-allowed")}>
+                      <Search className="w-3 h-3" /> {probingMuxSource ? 'Probing...' : 'Probe Source Tracks'}
+                    </button>
+                  </div>
+                  {muxSourceTracks.length > 0 && (
+                    <div className="border border-sf bg-void">
+                      <div className="grid grid-cols-[32px_40px_1fr_1fr_100px_60px] gap-0 text-[14px] font-bold uppercase tracking-widest text-nerv px-3 py-2 border-b border-sf">
+                        <span></span><span>#</span><span>Language</span><span>Name / New Name</span><span>Codec</span><span>Ch</span>
+                      </div>
+                      {muxSourceTracks.map(t => (
+                        <div key={t.index} className="grid grid-cols-[32px_40px_1fr_1fr_100px_60px] gap-0 items-center px-3 py-2 border-b border-sf last:border-b-0">
+                          <input type="checkbox" checked={!!muxSelectedIndices[t.index]} onChange={() => setMuxSelectedIndices(prev => ({ ...prev, [t.index]: !prev[t.index] }))} className="w-4 h-4 accent-nerv" />
+                          <span className="text-[14px] font-bold font-sys text-steel-dim">{t.index + 1}</span>
+                          <span className="text-xs font-bold text-steel">{langLabel(t.lang)} <span className="text-steel-dim">({t.lang})</span></span>
+                          <input type="text" value={muxTrackNames[t.index] ?? t.name} onChange={e => setMuxTrackNames(prev => ({ ...prev, [t.index]: e.target.value }))} placeholder={t.name || '(set name)'} className="border border-sf bg-void px-2 py-1.5 text-xs font-bold font-sys text-steel w-full" />
+                          <span className="text-[14px] font-sys text-steel-dim">{t.codec}</span>
+                          <span className="text-[14px] font-sys text-steel-dim">{t.channels}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
+              {/* Action bar */}
+              <div className="flex items-center gap-3 pt-1">
+                <button onClick={() => setToolEnv(prev => ({ ...prev, DRY_RUN: prev.DRY_RUN === '1' ? '0' : '1' }))} className={cn("flex items-center gap-2 px-3 py-2.5 text-[15px] font-bold uppercase border transition-all", toolEnv.DRY_RUN === '1' ? "border-nerv/30 bg-nerv/10 text-nerv" : "border-sf bg-void text-steel-dim")}>
+                  {toolEnv.DRY_RUN === '1' ? 'Dry Run On' : 'Dry Run Off'}
+                </button>
+                <button onClick={handleRunTool} disabled={toolStatus?.running} className={cn("flex items-center gap-2 px-6 py-2.5 text-[15px] font-bold uppercase transition-all active:scale-[0.98]", toolStatus?.running ? "bg-steel-dim/30 text-steel-dim cursor-not-allowed" : "bg-nerv text-black hover:bg-nerv-hot")}>
+                  <Play className="w-3.5 h-3.5" /> {toolStatus?.running ? 'Running...' : 'Run'}
+                </button>
+              </div>
             </div>
-          ))}
+          )}
         </div>
+
+        {/* Tool Output */}
+        {(toolLogs.length > 0 || toolStatus?.running) && (
+          <div className="shrink-0 border border-sf overflow-hidden flex flex-col h-[250px] bg-void-panel">
+            <div className="px-4 py-2 border-b border-sf flex items-center justify-between bg-void shrink-0">
+              <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-nerv" /><span className="text-[12px] font-bold uppercase tracking-widest text-nerv">Tool Output</span></div>
+              <div className="flex items-center gap-3">
+                {toolStatus?.running && <button onClick={stopTool} className="flex items-center gap-1.5 text-[14px] font-bold uppercase text-alert-red hover:text-alert-red/80 transition-colors"><StopCircle className="w-3 h-3" /> Stop</button>}
+                {!toolAutoScroll && <button onClick={() => setToolAutoScroll(true)} className="text-[14px] font-bold uppercase text-wire-cyan transition-colors">Resume Scroll</button>}
+                <button onClick={() => setToolLogs([])} className="text-[14px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
+              </div>
+            </div>
+            <div ref={toolLogRef} onScroll={() => { if (!toolLogRef.current) return; const { scrollTop, scrollHeight, clientHeight } = toolLogRef.current; setToolAutoScroll(scrollHeight - scrollTop - clientHeight < 60); }} className="flex-1 p-4 overflow-auto font-sys text-[17px] leading-relaxed whitespace-pre-wrap text-data-green-dim">
+              {toolLogs.length === 0 && <p className="text-steel-dim/50 italic">Waiting for output...</p>}
+              {toolLogs.map((log, i) => <div key={i} className={cn("mb-0.5", log.includes('[Process exited') ? (log.includes('code 0') ? 'text-data-green' : 'text-alert-red') : '')}>{log}</div>)}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1165,7 +1451,6 @@ const AudioScanner = ({ favorites, toggleFavorite }) => {
 
 const TOOL_CATEGORIES = [
   { id: 'all', label: 'All' },
-  { id: 'audio', label: 'Audio' },
   { id: 'subtitles', label: 'Subtitles' },
   { id: 'muxing', label: 'Muxing' },
   { id: 'metadata', label: 'Metadata' },
@@ -1400,7 +1685,7 @@ const ToolsSection = ({ toolLogs, setToolLogs, toolStatus, toolLogRef, appSettin
     if (autoScroll && toolLogRef.current) toolLogRef.current.scrollTop = toolLogRef.current.scrollHeight;
   }, [toolLogs, autoScroll, toolLogRef]);
 
-  const filtered = category === 'all' ? tools : tools.filter(t => t.category === category);
+  const filtered = (category === 'all' ? tools : tools.filter(t => t.category === category)).filter(t => !AUDIO_TAB_TOOL_IDS.includes(t.id));
   const handleScroll = () => {
     if (!toolLogRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = toolLogRef.current;
@@ -2122,7 +2407,7 @@ const App = () => {
           <div className="flex-1 overflow-auto p-6 max-w-[1800px] mx-auto w-full">
             {activeTab === 'queue' && <QueueSection queue={queue} />}
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
-            {activeTab === 'audio' && <AudioScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
+            {activeTab === 'audio' && <AudioScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} />}
             {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}
             {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} systemMetrics={systemMetrics} />}
           </div>

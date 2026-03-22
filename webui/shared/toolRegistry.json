@@ -284,5 +284,22 @@
       { "name": "SOURCE_FILE", "label": "Source File (single file)", "type": "file", "default": "" },
       { "name": "INPUT_DIR", "label": "Input Directory (all videos)", "type": "path", "default": "" }
     ]
+  },
+  {
+    "id": "mux_audio_tracks",
+    "name": "Mux Audio Tracks",
+    "description": "Extract selected audio tracks from source files and mux into target files, matched by episode token.",
+    "category": "audio",
+    "mode": "output",
+    "script": "mux-audio-tracks.sh",
+    "envVars": [
+      { "name": "SOURCE_DIR", "label": "Source Directory", "type": "path", "default": "" },
+      { "name": "TARGET_DIR", "label": "Target Directory", "type": "path", "default": "" },
+      { "name": "OUT_DIR", "label": "Output Directory", "type": "path", "default": "" },
+      { "name": "SEASON", "label": "Season Code", "type": "string", "default": "S01" },
+      { "name": "TRACK_INDICES", "label": "Audio Track Indices (0-based, comma-separated)", "type": "string", "default": "0" },
+      { "name": "TRACK_NAMES", "label": "Track Names (pipe-separated)", "type": "string", "default": "" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
   }
 ]

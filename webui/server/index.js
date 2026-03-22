@@ -983,6 +983,54 @@ app.post('/api/audio-scanner/rename', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.post('/api/audio-scanner/remove-tracks', async (req, res) => {
+  const { file, files, keepTrackIds, keepIndices } = req.body;
+
+  const processFile = async (filePath, ids) => {
+    const csv = ids.join(',');
+    const tmp = filePath.replace(/\.mkv$/i, '.tmp.mkv');
+    await new Promise((resolve, reject) => {
+      const proc = spawn('mkvmerge', ['-o', tmp, '--audio-tracks', csv, filePath]);
+      let stderr = '';
+      proc.stderr.on('data', d => stderr += d.toString());
+      proc.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || 'mkvmerge failed')));
+    });
+    await fs.move(tmp, filePath, { overwrite: true });
+  };
+
+  try {
+    if (file && keepTrackIds) {
+      // Single file mode: keepTrackIds are MKV track IDs
+      await processFile(file, keepTrackIds);
+      res.json({ success: true, processed: 1 });
+    } else if (files && keepIndices) {
+      // Batch mode: keepIndices are 0-based audio track positions
+      // Need to probe each file to get actual track IDs at those positions
+      let processed = 0;
+      for (const f of files) {
+        const probe = await new Promise((resolve, reject) => {
+          const proc = spawn('mkvmerge', ['-J', f]);
+          let out = '';
+          proc.stdout.on('data', d => out += d.toString());
+          proc.on('close', code => {
+            if (code !== 0) return reject(new Error(`probe failed for ${f}`));
+            try { resolve(JSON.parse(out)); } catch { reject(new Error(`parse failed for ${f}`)); }
+          });
+        });
+        const audioTracks = (probe.tracks || []).filter(t => t.type === 'audio');
+        const ids = keepIndices.filter(i => i < audioTracks.length).map(i => audioTracks[i].id);
+        if (ids.length === 0) continue;
+        if (ids.length === audioTracks.length) continue; // nothing to remove
+        await processFile(f, ids);
+        processed++;
+      }
+      res.json({ success: true, processed });
+    } else {
+      res.status(400).json({ error: 'Provide {file, keepTrackIds} or {files, keepIndices}' });
+    }
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // --- Tools API ---
 app.get('/api/tools', async (req, res) => {
   try { const registry = await fs.readJson(TOOL_REGISTRY_FILE); res.json(registry); } catch (err) { res.status(500).json({ error: err.message }); }

@@ -199,14 +199,13 @@ for src in "${files[@]}"; do
       pretty_codec="$(codec_pretty "$c")"
       [[ -z "$pretty_codec" ]] && pretty_codec="Audio"
 
-      is_commentary=0
-      [[ "$track_name" =~ [Cc]ommentary ]] && is_commentary=1
-
-      if [[ "$is_commentary" -eq 1 ]]; then
-        new_name="${pretty_lang} Commentary (${pretty_codec})"
-      else
-        new_name="${pretty_lang} ${pretty_ch} (${pretty_codec})"
+      # Skip commentary tracks — preserve user-set names
+      if [[ "$track_name" =~ [Cc]ommentary ]]; then
+        echo "  track:a${idx} lang='${lang:-none}' name='${track_name}' -> (skipped, commentary)"
+        continue
       fi
+
+      new_name="${pretty_lang} ${pretty_ch} (${pretty_codec})"
 
       echo "  track:a${idx} lang='${lang:-none}' ch='${channels:-none}' codec='${codec:-none}' name='${track_name:-}' -> '${new_name}'"
 
