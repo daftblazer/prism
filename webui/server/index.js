@@ -357,8 +357,8 @@ class Worker {
   }
 
   async processNext() {
-    if (queue.length === 0 || this.stopping) {
-      this.processing = false; this.stopping = false; currentJob = null; io.emit('status', { active: false, status: 'idle' }); return;
+    if (queue.length === 0 || this.stopping || paused) {
+      this.processing = false; this.stopping = false; currentJob = null; io.emit('status', { active: false, status: paused ? 'paused' : 'idle' }); return;
     }
     currentJob = queue[0];
     io.emit('queue_update', queue);
@@ -372,9 +372,11 @@ class Worker {
       }
     } catch (err) {
       console.error('Batch error:', err);
-      queue.shift();
-      await saveQueue();
-      io.emit('queue_update', queue);
+      if (!this.stopping) {
+        queue.shift();
+        await saveQueue();
+        io.emit('queue_update', queue);
+      }
     }
     this.processNext();
   }
@@ -460,7 +462,7 @@ class Worker {
       if (next) running.set(next.slotIndex, next.promise);
     }
 
-    if (!this.stopping) io.emit('status', { active: false, status: 'idle', progress: 100 });
+    if (!this.stopping) io.emit('batch_complete', { folder: batch.input_folder });
   }
 
   emitParallelStatus(batch) {
