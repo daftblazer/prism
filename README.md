@@ -12,8 +12,11 @@ A batch AV1 video encoding system with a NERV-inspired web dashboard for managin
 - **Smart audio handling** — Lossless audio is transcoded to Opus; lossy formats are copied as-is with language tags and titles preserved
 - **Auto-crop detection** — Automatically detects and removes black bars
 - **Real-time dashboard** — Live encoding statistics (frames, speed, bitrate, size, ETA), system metrics (per-core CPU, memory), NERV-styled terminal output, media intelligence panel, and operation queue
+- **Audio management** — Scan directories for audio track anomalies, rename tracks inline, remove unwanted tracks, mux audio from external sources, and batch-apply changes across files
+- **Subtitle management** — Scan and normalize subtitle tracks with inline renaming, forced flag editing, track removal, and batch operations
 - **Test encode & compare** — Run short sample encodes with different settings and compare screenshots side-by-side
 - **Media tools** — 20+ built-in shell tools for muxing, renaming tracks, analyzing color, generating screenshots, and more — all runnable from the UI
+- **Webhook notifications** — Get notified on Discord, Slack, or any webhook URL when encodes complete or fail, with auto-formatted Discord embeds
 - **System monitoring** — Per-core CPU usage with color-coded bars, segmented memory visualization, load averages, and uptime
 - **Pause/resume** — Pause and resume encode jobs without losing progress
 - **Persistent queue** — Jobs survive server restarts
@@ -70,11 +73,34 @@ Run 20+ media tools directly from the UI with a file browser. Tools include:
 | Category | Tools |
 |----------|-------|
 | **Muxing** | mux-english, mux-commentary, strip-compat-audio |
-| **Renaming** | rename-tracks, rename-files, rename-subtitles, rename-chapters |
+| **Renaming** | rename-tracks, rename-video-tracks, rename-files, rename-subtitles, rename-chapters |
 | **Audio** | keep-japanese-audio, set-default-audio, swap-audio-order, shift-audio-offset |
 | **Subtitles** | set-default-subtitle, swap-subtitle-order, shift-subtitle-offset |
 | **Analysis** | analyze-color, analyze-vfr, compare-runtimes |
 | **Generation** | generate-sample, generate-screenshots, generate-release-md |
+
+### Audio
+
+Scan directories to identify audio track layouts across all files:
+
+- **Track scanner** — Detects baseline track count and highlights files with extra or missing tracks
+- **Inline renaming** — Edit track names directly with language, codec, and channel info displayed
+- **Apply to all** — Copy renamed tracks from one file to every file in the batch
+- **Track removal** — Checkbox-based selection to remove unwanted tracks per-file or across all files
+- **Mux audio** — Extract audio from a source directory and mux into target files matched by episode token
+
+Quick-access tool strip for setting default audio, swapping track order, shifting audio offset, and muxing.
+
+### Subtitles
+
+Scan directories to identify subtitle track layouts:
+
+- **Track scanner** — Detects baseline track count and highlights anomalies, shows forced flag status
+- **Inline renaming** — Edit track names and forced flags directly
+- **Apply to all** — Batch-apply renamed tracks across all scanned files
+- **Track removal** — Remove unwanted subtitle tracks per-file or in batch
+
+Tool strip for setting default subtitle, swapping track order, and shifting subtitle offset.
 
 ### Compare
 
@@ -93,6 +119,10 @@ Toggle CRT effects and light mode. Configure release group name for output taggi
 | Threads per CCD | 0 | Enables CCD-aware thread allocation for AMD CPUs (e.g. 16 for an 8-core CCD with SMT). Set to 0 to use simple contiguous splitting |
 
 A live thread allocation preview shows the computed CPU assignments for each instance. When `taskset` is available, each encode process is pinned to its assigned cores and given a matching `--lp` thread count.
+
+**Notifications:**
+
+Configure webhook URLs to receive notifications when encodes complete or fail. Supports multiple webhooks that can be independently enabled/disabled. Discord webhook URLs are auto-detected and payloads are formatted as rich embeds with color-coded status (green for complete, red for errors). All other URLs receive a standard JSON POST. Each webhook has a test button to verify connectivity.
 
 ## Supported Encoders
 
