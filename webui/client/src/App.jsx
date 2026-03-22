@@ -6,7 +6,7 @@ import {
   RefreshCcw, CheckCircle2, Clock, AlertCircle, CornerLeftUp, HardDrive,
   Settings, Wrench, Play, Search, StopCircle, FileVideo, File, Star,
   FlaskConical, Trash2, HelpCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Columns, Image, Pause,
-  Music, Save, Edit3, AlertTriangle, Languages, Bell, Send
+  Music, Save, Edit3, AlertTriangle, Languages, Bell, Send, Loader2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -1548,7 +1548,13 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
               </span>
             )}
           </div>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto relative">
+            {(Object.values(removing).some(Boolean)) && (
+              <div className="sticky top-0 z-10 flex items-center justify-center gap-3 px-4 py-3 bg-alert-red/15 border-b border-alert-red/30 backdrop-blur-sm">
+                <Loader2 className="w-4 h-4 text-alert-red animate-spin" />
+                <span className="text-[13px] font-bold uppercase tracking-widest text-alert-red">Removing tracks — please wait...</span>
+              </div>
+            )}
             {!results && !scanning && <div className="flex items-center justify-center h-full text-steel-dim/50 text-xs font-bold uppercase tracking-widest">Select a directory and scan to analyze audio tracks</div>}
             {scanning && <div className="flex items-center justify-center h-full text-nerv text-xs font-bold uppercase tracking-widest animate-pulse">Scanning files...</div>}
             {results && results.files.map(file => (
@@ -1989,7 +1995,13 @@ const SubtitleScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, too
               </span>
             )}
           </div>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto relative">
+            {(Object.values(removing).some(Boolean)) && (
+              <div className="sticky top-0 z-10 flex items-center justify-center gap-3 px-4 py-3 bg-alert-red/15 border-b border-alert-red/30 backdrop-blur-sm">
+                <Loader2 className="w-4 h-4 text-alert-red animate-spin" />
+                <span className="text-[13px] font-bold uppercase tracking-widest text-alert-red">Removing tracks — please wait...</span>
+              </div>
+            )}
             {!results && !scanning && <div className="flex items-center justify-center h-full text-steel-dim/50 text-xs font-bold uppercase tracking-widest">Select a directory and scan to analyze subtitle tracks</div>}
             {scanning && <div className="flex items-center justify-center h-full text-nerv text-xs font-bold uppercase tracking-widest animate-pulse">Scanning files...</div>}
             {results && results.files.map(file => (
