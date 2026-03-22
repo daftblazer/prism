@@ -1031,6 +1031,124 @@ app.post('/api/audio-scanner/remove-tracks', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- Subtitle Scanner API ---
+app.get('/api/subtitle-scanner/scan', async (req, res) => {
+  const dir = req.query.dir;
+  if (!dir) return res.status(400).json({ error: 'dir required' });
+  try {
+    const entries = await fs.readdir(dir);
+    const mkvFiles = entries.filter(f => f.toLowerCase().endsWith('.mkv')).sort();
+    if (mkvFiles.length === 0) return res.status(404).json({ error: 'No MKV files found in directory' });
+
+    const probeFile = (file) => new Promise((resolve, reject) => {
+      const filePath = path.join(dir, file);
+      const proc = spawn('mkvmerge', ['-J', filePath]);
+      let out = '';
+      proc.stdout.on('data', d => out += d.toString());
+      proc.on('close', code => {
+        if (code !== 0) return reject(new Error(`mkvmerge failed for ${file}`));
+        try { resolve({ file, filePath, data: JSON.parse(out) }); } catch { reject(new Error(`Parse failed for ${file}`)); }
+      });
+    });
+
+    const results = [];
+    for (let i = 0; i < mkvFiles.length; i += 4) {
+      const batch = mkvFiles.slice(i, i + 4).map(f => probeFile(f).catch(err => ({ file: f, filePath: path.join(dir, f), error: err.message })));
+      results.push(...await Promise.all(batch));
+    }
+
+    const files = results.map(r => {
+      if (r.error) return { path: r.filePath, name: r.file, subtitleTracks: [], error: r.error };
+      let subIdx = 0;
+      const subtitleTracks = (r.data.tracks || []).filter(t => t.type === 'subtitles').map(t => ({
+        index: ++subIdx,
+        id: t.id,
+        language: t.properties?.language || 'und',
+        name: t.properties?.track_name || '',
+        codec: t.codec || '',
+        forced: !!t.properties?.forced_track,
+        defaultTrack: !!t.properties?.default_track,
+      }));
+      return { path: r.filePath, name: r.file, subtitleTracks };
+    });
+
+    const counts = files.filter(f => !f.error).map(f => f.subtitleTracks.length);
+    const freq = {};
+    counts.forEach(c => freq[c] = (freq[c] || 0) + 1);
+    const baseline = Number(Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] || 0);
+
+    files.forEach(f => { f.hasExtra = f.subtitleTracks.length > baseline; f.hasFewer = f.subtitleTracks.length < baseline; });
+    files.sort((a, b) => (b.hasExtra - a.hasExtra) || (b.hasFewer - a.hasFewer) || a.name.localeCompare(b.name));
+
+    res.json({ baseline, totalFiles: files.length, extraCount: files.filter(f => f.hasExtra).length, files });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/subtitle-scanner/rename', async (req, res) => {
+  const { file, tracks } = req.body;
+  if (!file || !tracks || !Array.isArray(tracks)) return res.status(400).json({ error: 'file and tracks[] required' });
+
+  const args = [file];
+  for (const t of tracks) {
+    args.push('--edit', `track:s${t.index}`, '--set', `name=${t.name}`);
+  }
+
+  try {
+    await new Promise((resolve, reject) => {
+      const proc = spawn('mkvpropedit', args);
+      let stderr = '';
+      proc.stderr.on('data', d => stderr += d.toString());
+      proc.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || 'mkvpropedit failed')));
+    });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/subtitle-scanner/remove-tracks', async (req, res) => {
+  const { file, files, keepTrackIds, keepIndices } = req.body;
+
+  const processFile = async (filePath, ids) => {
+    const csv = ids.join(',');
+    const tmp = filePath.replace(/\.mkv$/i, '.tmp.mkv');
+    await new Promise((resolve, reject) => {
+      const proc = spawn('mkvmerge', ['-o', tmp, '--subtitle-tracks', csv, filePath]);
+      let stderr = '';
+      proc.stderr.on('data', d => stderr += d.toString());
+      proc.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || 'mkvmerge failed')));
+    });
+    await fs.move(tmp, filePath, { overwrite: true });
+  };
+
+  try {
+    if (file && keepTrackIds) {
+      await processFile(file, keepTrackIds);
+      res.json({ success: true, processed: 1 });
+    } else if (files && keepIndices) {
+      let processed = 0;
+      for (const f of files) {
+        const probe = await new Promise((resolve, reject) => {
+          const proc = spawn('mkvmerge', ['-J', f]);
+          let out = '';
+          proc.stdout.on('data', d => out += d.toString());
+          proc.on('close', code => {
+            if (code !== 0) return reject(new Error(`probe failed for ${f}`));
+            try { resolve(JSON.parse(out)); } catch { reject(new Error(`parse failed for ${f}`)); }
+          });
+        });
+        const subTracks = (probe.tracks || []).filter(t => t.type === 'subtitles');
+        const ids = keepIndices.filter(i => i < subTracks.length).map(i => subTracks[i].id);
+        if (ids.length === 0) continue;
+        if (ids.length === subTracks.length) continue;
+        await processFile(f, ids);
+        processed++;
+      }
+      res.json({ success: true, processed });
+    } else {
+      res.status(400).json({ error: 'Provide {file, keepTrackIds} or {files, keepIndices}' });
+    }
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // --- Tools API ---
 app.get('/api/tools', async (req, res) => {
   try { const registry = await fs.readJson(TOOL_REGISTRY_FILE); res.json(registry); } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1477,7 +1595,7 @@ app.delete('/api/cleanup/work-dirs', async (req, res) => {
   }
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '0.2.0-nightly.20260321', channel: 'nightly' }));
+app.get('/api/version', (req, res) => res.json({ version: '0.2.0-nightly.20260322', channel: 'nightly' }));
 
 if (fs.existsSync(frontendDist)) app.get('*', (req, res) => { if (!req.path.startsWith('/api')) res.sendFile(path.join(frontendDist, 'index.html')); });
 

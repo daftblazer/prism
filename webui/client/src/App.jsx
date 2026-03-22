@@ -6,7 +6,7 @@ import {
   RefreshCcw, CheckCircle2, Clock, AlertCircle, CornerLeftUp, HardDrive,
   Settings, Wrench, Play, Search, StopCircle, FileVideo, File, Star,
   FlaskConical, Trash2, HelpCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Columns, Image, Pause,
-  Music, Save, Edit3, AlertTriangle
+  Music, Save, Edit3, AlertTriangle, Languages
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -1005,6 +1005,9 @@ const AUDIO_TAB_TOOL_IDS = ['swap_audio_order', 'shift_audio_offset', 'set_defau
 
 const AUDIO_TOOL_STRIP_IDS = ['rename_tracks', 'set_default_audio', 'swap_audio_order', 'shift_audio_offset', 'mux_audio_tracks'];
 
+const SUBTITLE_TAB_TOOL_IDS = ['swap_subtitle_order', 'shift_subtitles_offset', 'set_default_subtitle', 'rename_subtitles'];
+const SUBTITLE_TOOL_STRIP_IDS = ['set_default_subtitle', 'swap_subtitle_order', 'shift_subtitles_offset'];
+
 const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolStatus, toolLogRef, appSettings }) => {
   const [browsePath, setBrowsePath] = useState('/');
   const [browseItems, setBrowseItems] = useState([]);
@@ -1449,9 +1452,417 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
   );
 };
 
+const SubtitleScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolStatus, toolLogRef, appSettings }) => {
+  const [browsePath, setBrowsePath] = useState('/');
+  const [browseItems, setBrowseItems] = useState([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [selectedDir, setSelectedDir] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [results, setResults] = useState(null);
+  const [expandedFile, setExpandedFile] = useState(null);
+  const [editedNames, setEditedNames] = useState({});
+  const [saving, setSaving] = useState({});
+  const [checkedTracks, setCheckedTracks] = useState({});
+  const [removing, setRemoving] = useState({});
+  const [subTools, setSubTools] = useState([]);
+  const [activeTool, setActiveTool] = useState(null);
+  const [toolEnv, setToolEnv] = useState({});
+  const [activePathVar, setActivePathVar] = useState(null);
+  const [toolAutoScroll, setToolAutoScroll] = useState(true);
+  const [defaultSubTracks, setDefaultSubTracks] = useState([]);
+  const [probingDefault, setProbingDefault] = useState(false);
+
+  useEffect(() => {
+    setBrowseLoading(true);
+    axios.get(`/api/browse?path=${encodeURIComponent(browsePath)}`).then(r => setBrowseItems(r.data)).catch(console.error).finally(() => setBrowseLoading(false));
+  }, [browsePath]);
+
+  useEffect(() => {
+    axios.get('/api/tools').then(r => {
+      setSubTools(r.data.filter(t => SUBTITLE_TOOL_STRIP_IDS.includes(t.id)));
+    }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (toolAutoScroll && toolLogRef.current) toolLogRef.current.scrollTop = toolLogRef.current.scrollHeight;
+  }, [toolLogs, toolAutoScroll, toolLogRef]);
+
+  useEffect(() => {
+    if (activeTool?.id !== 'set_default_subtitle' || !selectedDir) { setDefaultSubTracks([]); return; }
+    setProbingDefault(true);
+    axios.get(`/api/tools/probe?path=${encodeURIComponent(selectedDir)}`)
+      .then(res => {
+        const tracks = (res.data.tracks || []).filter(t => t.type === 'subtitles').map((t, i) => ({
+          index: i + 1, lang: t.properties?.language || 'und', name: t.properties?.track_name || '',
+          codec: t.codec || '', forced: !!t.properties?.forced_track,
+        }));
+        setDefaultSubTracks(tracks);
+        if (tracks.length > 0) setToolEnv(prev => ({ ...prev, SUB_CHOICE: prev.SUB_CHOICE || String(tracks[0].index) }));
+      })
+      .catch(() => setDefaultSubTracks([]))
+      .finally(() => setProbingDefault(false));
+  }, [activeTool?.id, selectedDir]);
+
+  const handleScan = async () => {
+    if (!selectedDir) return;
+    setScanning(true);
+    setResults(null);
+    setExpandedFile(null);
+    setEditedNames({});
+    setCheckedTracks({});
+    try {
+      const res = await axios.get(`/api/subtitle-scanner/scan?dir=${encodeURIComponent(selectedDir)}`);
+      setResults(res.data);
+      const checks = {};
+      res.data.files.forEach(f => { checks[f.path] = {}; f.subtitleTracks.forEach(t => { checks[f.path][t.id] = true; }); });
+      setCheckedTracks(checks);
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setScanning(false); }
+  };
+
+  const handleExpand = (filePath) => {
+    if (expandedFile === filePath) { setExpandedFile(null); return; }
+    setExpandedFile(filePath);
+    const file = results?.files?.find(f => f.path === filePath);
+    if (file) {
+      const names = {};
+      file.subtitleTracks.forEach(t => { names[t.index] = t.name; });
+      setEditedNames(prev => ({ ...prev, [filePath]: names }));
+    }
+  };
+
+  const handleNameChange = (filePath, trackIndex, value) => {
+    setEditedNames(prev => ({ ...prev, [filePath]: { ...(prev[filePath] || {}), [trackIndex]: value } }));
+  };
+
+  const handleSave = async (filePath) => {
+    const names = editedNames[filePath];
+    if (!names) return;
+    const tracks = Object.entries(names).map(([index, name]) => ({ index: Number(index), name }));
+    setSaving(prev => ({ ...prev, [filePath]: true }));
+    try {
+      await axios.post('/api/subtitle-scanner/rename', { file: filePath, tracks });
+      setResults(prev => {
+        if (!prev) return prev;
+        const files = prev.files.map(f => f.path === filePath ? { ...f, subtitleTracks: f.subtitleTracks.map(t => ({ ...t, name: names[t.index] ?? t.name })) } : f);
+        return { ...prev, files };
+      });
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setSaving(prev => ({ ...prev, [filePath]: false })); }
+  };
+
+  const handleSaveAll = async () => {
+    if (!results || !expandedFile) return;
+    const names = editedNames[expandedFile];
+    if (!names) return;
+    // names is keyed by 1-based track index — apply same index→name mapping to all files
+    const allFiles = results.files;
+    if (!confirm(`Apply these track names to all ${allFiles.length} files?`)) return;
+    setSaving(prev => ({ ...prev, _all: true }));
+    try {
+      for (const f of allFiles) {
+        const tracks = Object.entries(names)
+          .filter(([idx]) => Number(idx) <= f.subtitleTracks.length)
+          .map(([index, name]) => ({ index: Number(index), name }));
+        if (tracks.length === 0) continue;
+        await axios.post('/api/subtitle-scanner/rename', { file: f.path, tracks });
+      }
+      // Update local state
+      setResults(prev => {
+        if (!prev) return prev;
+        const files = prev.files.map(f => ({
+          ...f,
+          subtitleTracks: f.subtitleTracks.map(t => ({ ...t, name: names[t.index] ?? t.name })),
+        }));
+        return { ...prev, files };
+      });
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setSaving(prev => ({ ...prev, _all: false })); }
+  };
+
+  const hasChanges = (filePath) => {
+    const file = results?.files?.find(f => f.path === filePath);
+    const names = editedNames[filePath];
+    if (!file || !names) return false;
+    return file.subtitleTracks.some(t => names[t.index] !== undefined && names[t.index] !== t.name);
+  };
+
+  const toggleTrackCheck = (filePath, trackId) => {
+    setCheckedTracks(prev => ({ ...prev, [filePath]: { ...(prev[filePath] || {}), [trackId]: !(prev[filePath]?.[trackId]) } }));
+  };
+
+  const getUncheckedCount = (filePath) => {
+    const checks = checkedTracks[filePath];
+    if (!checks) return 0;
+    return Object.values(checks).filter(v => !v).length;
+  };
+
+  const handleRemoveTracks = async (filePath) => {
+    const checks = checkedTracks[filePath];
+    if (!checks) return;
+    const keepIds = Object.entries(checks).filter(([, v]) => v).map(([id]) => Number(id));
+    if (keepIds.length === 0) return alert('Cannot remove all subtitle tracks');
+    setRemoving(prev => ({ ...prev, [filePath]: true }));
+    try {
+      await axios.post('/api/subtitle-scanner/remove-tracks', { file: filePath, keepTrackIds: keepIds });
+      await handleScan();
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setRemoving(prev => ({ ...prev, [filePath]: false })); }
+  };
+
+  const handleRemoveAll = async () => {
+    if (!results || !expandedFile) return;
+    const checks = checkedTracks[expandedFile];
+    if (!checks) return;
+    const file = results.files.find(f => f.path === expandedFile);
+    if (!file) return;
+    const keepIndices = file.subtitleTracks.map((t, i) => checks[t.id] ? i : -1).filter(i => i >= 0);
+    if (keepIndices.length === 0) return alert('Cannot remove all subtitle tracks');
+    const allFiles = results.files.map(f => f.path);
+    if (!confirm(`Remove unchecked track positions from all ${allFiles.length} files?`)) return;
+    setRemoving(prev => ({ ...prev, _all: true }));
+    try {
+      await axios.post('/api/subtitle-scanner/remove-tracks', { files: allFiles, keepIndices });
+      await handleScan();
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+    finally { setRemoving(prev => ({ ...prev, _all: false })); }
+  };
+
+  const selectTool = (tool) => {
+    if (activeTool?.id === tool.id) { setActiveTool(null); setActivePathVar(null); return; }
+    setActiveTool(tool);
+    const init = {};
+    const pathVars = tool.envVars.filter(v => v.type === 'path');
+    tool.envVars.forEach(v => {
+      if (v.type === 'path') {
+        if (v === pathVars[0]) init[v.name] = selectedDir;
+        else init[v.name] = v.default || '';
+      } else init[v.name] = v.default || '';
+    });
+    setToolEnv(init);
+    setActivePathVar(pathVars.length > 1 ? pathVars[0].name : null);
+  };
+
+  const handleBrowseNav = (p) => {
+    setBrowsePath(p);
+    if (!activeTool || !activePathVar) {
+      setSelectedDir(p);
+    } else {
+      setToolEnv(prev => ({ ...prev, [activePathVar]: p }));
+    }
+  };
+
+  const handleBrowseSelect = (p) => {
+    if (!activeTool || !activePathVar) {
+      setSelectedDir(p);
+    } else {
+      setToolEnv(prev => ({ ...prev, [activePathVar]: p }));
+    }
+  };
+
+  const handleRunTool = async () => {
+    if (!activeTool) return;
+    const env = { ...toolEnv };
+    const tool = activeTool;
+    const dirVar = tool.envVars.find(v => v.type === 'path');
+    if (dirVar && !env[dirVar.name]) env[dirVar.name] = selectedDir;
+    Object.keys(env).forEach(k => { if (env[k] === '') delete env[k]; });
+    setToolLogs([]);
+    try {
+      await axios.post(`/api/tools/${tool.id}/run`, { env });
+    } catch (e) { alert(e.response?.data?.error || e.message); }
+  };
+
+  const stopTool = async () => { try { await axios.post(`/api/tools/${activeTool?.id || 'unknown'}/stop`); } catch (e) { console.error(e); } };
+
+  const langLabel = (code) => ({ eng: 'English', jpn: 'Japanese', und: 'Undefined', ger: 'German', deu: 'German', fre: 'French', fra: 'French', spa: 'Spanish', ita: 'Italian', por: 'Portuguese', rus: 'Russian', kor: 'Korean', zho: 'Chinese', chi: 'Chinese', ara: 'Arabic' }[code] || code);
+  const inputCls = "w-full border border-sf bg-void p-2.5 text-xs font-bold text-steel font-sys";
+
+  const toolPathVars = activeTool ? activeTool.envVars.filter(v => v.type === 'path') : [];
+  const toolNonPathVars = activeTool ? activeTool.envVars.filter(v => v.type !== 'path' && v.name !== 'DRY_RUN') : [];
+
+  return (
+    <div className="flex gap-4 h-[calc(100vh-8rem)]">
+      {/* File Browser */}
+      <div className="w-80 shrink-0 border border-sf flex flex-col bg-void overflow-hidden">
+        <div className="px-4 py-3 border-b border-sf bg-void-panel">
+          <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">
+            {activePathVar ? `Select: ${activeTool?.envVars.find(v => v.name === activePathVar)?.label || activePathVar}` : 'Select Directory'}
+          </h3>
+        </div>
+        {toolPathVars.length > 1 && (
+          <div className="px-3 py-2 border-b border-sf flex gap-1.5 flex-wrap bg-void-panel">
+            {toolPathVars.map(v => (
+              <button key={v.name} onClick={() => setActivePathVar(v.name)} className={cn("px-2 py-1 text-[14px] font-bold uppercase transition-all", activePathVar === v.name ? "bg-nerv text-black" : "bg-void border border-sf text-steel-dim hover:text-nerv")}>{v.label.replace(' Directory', '')}</button>
+            ))}
+          </div>
+        )}
+        <FileBrowser currentPath={browsePath} onNavigate={handleBrowseNav} onSelect={handleBrowseSelect} items={browseItems} loading={browseLoading} favorites={favorites} onToggleFavorite={toggleFavorite} />
+        <div className="p-3 border-t border-sf bg-void-panel space-y-2">
+          <div className="text-[14px] font-sys font-bold text-steel-dim truncate">{selectedDir || 'No directory selected'}</div>
+          <button onClick={handleScan} disabled={!selectedDir || scanning} className={cn("w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs transition-all active:scale-95 tracking-wider uppercase", !selectedDir || scanning ? "bg-steel-dim/30 text-steel-dim cursor-not-allowed" : "bg-nerv text-black hover:bg-nerv-hot")}>
+            <Search className="w-3.5 h-3.5" /> {scanning ? 'Scanning...' : 'Scan Subtitle Tracks'}
+          </button>
+        </div>
+      </div>
+
+      {/* Right panel */}
+      <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+        {/* Scan Results */}
+        <div className="flex-1 border border-sf flex flex-col bg-void-panel overflow-hidden min-h-0">
+          <div className="px-4 py-3 border-b border-sf flex items-center justify-between bg-void shrink-0">
+            <div className="flex items-center gap-3">
+              <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">Scan Results</h3>
+              {results && <span className="text-[14px] font-sys font-bold text-steel-dim">{results.totalFiles} files — baseline: {results.baseline} subtitle tracks</span>}
+            </div>
+            {results && results.extraCount > 0 && (
+              <span className="flex items-center gap-1.5 text-[14px] font-bold uppercase px-2.5 py-1 bg-nerv/15 text-nerv">
+                <AlertTriangle className="w-3 h-3" /> {results.extraCount} with extra tracks
+              </span>
+            )}
+          </div>
+          <div className="flex-1 overflow-auto">
+            {!results && !scanning && <div className="flex items-center justify-center h-full text-steel-dim/50 text-xs font-bold uppercase tracking-widest">Select a directory and scan to analyze subtitle tracks</div>}
+            {scanning && <div className="flex items-center justify-center h-full text-nerv text-xs font-bold uppercase tracking-widest animate-pulse">Scanning files...</div>}
+            {results && results.files.map(file => (
+              <div key={file.path} className={cn("border-b border-sf", file.hasExtra && "bg-nerv/[0.03]")}>
+                <div onClick={() => handleExpand(file.path)} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-steel/[0.05] transition-all">
+                  <FileVideo className={cn("w-4 h-4 shrink-0", file.hasExtra ? "text-nerv" : "text-steel-dim")} />
+                  <span className="flex-1 text-xs font-bold text-steel truncate">{file.name}</span>
+                  <span className={cn("text-[14px] font-bold font-sys tabular-nums", file.hasExtra ? "text-nerv" : "text-steel-dim")}>{file.subtitleTracks.length} track{file.subtitleTracks.length !== 1 ? 's' : ''}</span>
+                  {file.hasExtra && <span className="text-[14px] font-bold uppercase px-2 py-0.5 bg-nerv/15 text-nerv">Extra</span>}
+                  {file.hasFewer && <span className="text-[14px] font-bold uppercase px-2 py-0.5 bg-wire-cyan/15 text-wire-cyan">Fewer</span>}
+                  <ChevronDown className={cn("w-3.5 h-3.5 text-steel-dim transition-transform", expandedFile === file.path && "rotate-180")} />
+                </div>
+                {expandedFile === file.path && (
+                  <div className="px-4 pb-4 space-y-2">
+                    <div className="border border-sf bg-void">
+                      <div className="grid grid-cols-[32px_40px_1fr_1fr_100px_60px] gap-0 text-[14px] font-bold uppercase tracking-widest text-nerv px-3 py-2 border-b border-sf">
+                        <span></span><span>#</span><span>Language</span><span>Track Name</span><span>Codec</span><span>Forced</span>
+                      </div>
+                      {file.subtitleTracks.map((track, i) => {
+                        const isExtra = i >= results.baseline;
+                        const isChecked = checkedTracks[file.path]?.[track.id] ?? true;
+                        return (
+                          <div key={track.index} className={cn("grid grid-cols-[32px_40px_1fr_1fr_100px_60px] gap-0 items-center px-3 py-2 border-b border-sf last:border-b-0", isExtra && "bg-nerv/[0.06]", !isChecked && "opacity-40")}>
+                            <input type="checkbox" checked={isChecked} onChange={() => toggleTrackCheck(file.path, track.id)} className="w-4 h-4 accent-nerv" />
+                            <span className={cn("text-[14px] font-bold font-sys", isExtra ? "text-nerv" : "text-steel-dim")}>{track.index}</span>
+                            <span className="text-xs font-bold text-steel">{langLabel(track.language)} <span className="text-steel-dim">({track.language})</span></span>
+                            <input type="text" value={editedNames[file.path]?.[track.index] ?? track.name} onChange={e => handleNameChange(file.path, track.index, e.target.value)} placeholder="(no name)" className={cn("border bg-void px-2 py-1.5 text-xs font-bold font-sys text-steel w-full", isExtra ? "border-nerv/30" : "border-sf")} />
+                            <span className="text-[14px] font-sys text-steel-dim">{track.codec}</span>
+                            <span className={cn("text-[14px] font-sys font-bold", track.forced ? "text-nerv" : "text-steel-dim")}>{track.forced ? 'Yes' : 'No'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <button onClick={() => handleSave(file.path)} disabled={!hasChanges(file.path) || saving[file.path]} className={cn("flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase transition-all", hasChanges(file.path) ? "bg-nerv text-black hover:bg-nerv-hot" : "bg-steel-dim/20 text-steel-dim cursor-not-allowed")}>
+                        <Save className="w-3 h-3" /> {saving[file.path] ? 'Saving...' : 'Save Names'}
+                      </button>
+                      {hasChanges(file.path) && (
+                        <button onClick={handleSaveAll} disabled={saving._all} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase border border-nerv/50 text-nerv hover:bg-nerv/10 transition-all">
+                          {saving._all ? 'Applying...' : 'Apply Names to All Files'}
+                        </button>
+                      )}
+                      {getUncheckedCount(file.path) > 0 && (<>
+                        <button onClick={() => handleRemoveTracks(file.path)} disabled={removing[file.path]} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase bg-alert-red/90 text-white hover:bg-alert-red transition-all">
+                          <Trash2 className="w-3 h-3" /> {removing[file.path] ? 'Removing...' : `Remove ${getUncheckedCount(file.path)} Unchecked`}
+                        </button>
+                        <button onClick={handleRemoveAll} disabled={removing._all} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase border border-alert-red/50 text-alert-red hover:bg-alert-red/10 transition-all">
+                          {removing._all ? 'Applying...' : 'Apply to All Files'}
+                        </button>
+                      </>)}
+                      {hasChanges(file.path) && !saving._all && <span className="text-[14px] text-nerv-dim font-bold">Unsaved changes</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Tool Strip + Inline Params */}
+        <div className="shrink-0 border border-sf bg-void-panel overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-sf flex items-center gap-2 flex-wrap bg-void">
+            <span className="text-[12px] font-bold uppercase tracking-widest text-nerv mr-2">Tools</span>
+            {subTools.map(tool => (
+              <button key={tool.id} onClick={() => selectTool(tool)} className={cn("px-3 py-1.5 text-[14px] font-bold uppercase tracking-wider transition-all", activeTool?.id === tool.id ? "bg-nerv text-black" : "bg-void-panel border border-sf text-steel-dim hover:text-nerv hover:border-nerv-dim/30")}>
+                {tool.name}
+              </button>
+            ))}
+          </div>
+          {activeTool && (
+            <div className="p-4 space-y-3 border-b border-sf">
+              <p className="text-[14px] text-steel-dim">{activeTool.description}</p>
+              {toolPathVars.map(v => (
+                <div key={v.name} className="flex items-center gap-3">
+                  <span className="text-[14px] font-bold uppercase tracking-widest text-nerv w-40 shrink-0">{v.label}</span>
+                  <div className="flex-1 border border-sf bg-void px-2.5 py-1.5 text-xs font-bold font-sys text-steel-dim truncate cursor-pointer hover:border-nerv-dim/30" onClick={() => { setActivePathVar(v.name); if (toolEnv[v.name]) setBrowsePath(toolEnv[v.name]); }}>
+                    {toolEnv[v.name] || '(click to select)'}
+                  </div>
+                </div>
+              ))}
+              <div className="grid grid-cols-2 gap-3">
+                {toolNonPathVars.map(v => (
+                  <div key={v.name} className="space-y-1">
+                    <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">{v.label}</label>
+                    {activeTool.id === 'set_default_subtitle' && v.name === 'SUB_CHOICE' ? (
+                      probingDefault ? (
+                        <div className="px-3 py-2.5 text-xs font-bold border border-sf bg-void text-steel-dim">Scanning...</div>
+                      ) : defaultSubTracks.length > 0 ? (
+                        <select value={toolEnv.SUB_CHOICE || ''} onChange={e => setToolEnv(prev => ({ ...prev, SUB_CHOICE: e.target.value }))} className={inputCls}>
+                          {defaultSubTracks.map(t => <option key={t.index} value={String(t.index)}>Track {t.index}: {t.lang} — {t.name || '(no name)'} ({t.codec}{t.forced ? ', forced' : ''})</option>)}
+                        </select>
+                      ) : (
+                        <div className="px-3 py-2.5 text-xs font-bold border border-sf bg-void text-steel-dim">Select a directory first</div>
+                      )
+                    ) : v.type === 'boolean' ? (
+                      <button onClick={() => setToolEnv(prev => ({ ...prev, [v.name]: prev[v.name] === '1' ? '0' : '1' }))} className={cn("px-3 py-2.5 text-xs font-bold border transition-all w-full text-left", toolEnv[v.name] === '1' ? "border-data-green/30 bg-data-green/10 text-data-green" : "border-sf bg-void text-steel-dim")}>
+                        {toolEnv[v.name] === '1' ? 'Enabled' : 'Disabled'}
+                      </button>
+                    ) : (
+                      <input type={v.type === 'number' ? 'number' : 'text'} value={toolEnv[v.name] || ''} onChange={e => setToolEnv(prev => ({ ...prev, [v.name]: e.target.value }))} placeholder={v.default || ''} className={inputCls} />
+                    )}
+                  </div>
+                ))}
+              </div>
+              {/* Action bar */}
+              <div className="flex items-center gap-3 pt-1">
+                <button onClick={() => setToolEnv(prev => ({ ...prev, DRY_RUN: prev.DRY_RUN === '1' ? '0' : '1' }))} className={cn("flex items-center gap-2 px-3 py-2.5 text-[15px] font-bold uppercase border transition-all", toolEnv.DRY_RUN === '1' ? "border-nerv/30 bg-nerv/10 text-nerv" : "border-sf bg-void text-steel-dim")}>
+                  {toolEnv.DRY_RUN === '1' ? 'Dry Run On' : 'Dry Run Off'}
+                </button>
+                <button onClick={handleRunTool} disabled={toolStatus?.running} className={cn("flex items-center gap-2 px-6 py-2.5 text-[15px] font-bold uppercase transition-all active:scale-[0.98]", toolStatus?.running ? "bg-steel-dim/30 text-steel-dim cursor-not-allowed" : "bg-nerv text-black hover:bg-nerv-hot")}>
+                  <Play className="w-3.5 h-3.5" /> {toolStatus?.running ? 'Running...' : 'Run'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Tool Output */}
+        {(toolLogs.length > 0 || toolStatus?.running) && (
+          <div className="shrink-0 border border-sf overflow-hidden flex flex-col h-[250px] bg-void-panel">
+            <div className="px-4 py-2 border-b border-sf flex items-center justify-between bg-void shrink-0">
+              <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-nerv" /><span className="text-[12px] font-bold uppercase tracking-widest text-nerv">Tool Output</span></div>
+              <div className="flex items-center gap-3">
+                {toolStatus?.running && <button onClick={stopTool} className="flex items-center gap-1.5 text-[14px] font-bold uppercase text-alert-red hover:text-alert-red/80 transition-colors"><StopCircle className="w-3 h-3" /> Stop</button>}
+                {!toolAutoScroll && <button onClick={() => setToolAutoScroll(true)} className="text-[14px] font-bold uppercase text-wire-cyan transition-colors">Resume Scroll</button>}
+                <button onClick={() => setToolLogs([])} className="text-[14px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
+              </div>
+            </div>
+            <div ref={toolLogRef} onScroll={() => { if (!toolLogRef.current) return; const { scrollTop, scrollHeight, clientHeight } = toolLogRef.current; setToolAutoScroll(scrollHeight - scrollTop - clientHeight < 60); }} className="flex-1 p-4 overflow-auto font-sys text-[17px] leading-relaxed whitespace-pre-wrap text-data-green-dim">
+              {toolLogs.length === 0 && <p className="text-steel-dim/50 italic">Waiting for output...</p>}
+              {toolLogs.map((log, i) => <div key={i} className={cn("mb-0.5", log.includes('[Process exited') ? (log.includes('code 0') ? 'text-data-green' : 'text-alert-red') : '')}>{log}</div>)}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const TOOL_CATEGORIES = [
   { id: 'all', label: 'All' },
-  { id: 'subtitles', label: 'Subtitles' },
   { id: 'muxing', label: 'Muxing' },
   { id: 'metadata', label: 'Metadata' },
   { id: 'analysis', label: 'Analysis' },
@@ -1685,7 +2096,7 @@ const ToolsSection = ({ toolLogs, setToolLogs, toolStatus, toolLogRef, appSettin
     if (autoScroll && toolLogRef.current) toolLogRef.current.scrollTop = toolLogRef.current.scrollHeight;
   }, [toolLogs, autoScroll, toolLogRef]);
 
-  const filtered = (category === 'all' ? tools : tools.filter(t => t.category === category)).filter(t => !AUDIO_TAB_TOOL_IDS.includes(t.id));
+  const filtered = (category === 'all' ? tools : tools.filter(t => t.category === category)).filter(t => !AUDIO_TAB_TOOL_IDS.includes(t.id) && !SUBTITLE_TAB_TOOL_IDS.includes(t.id));
   const handleScroll = () => {
     if (!toolLogRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = toolLogRef.current;
@@ -2378,6 +2789,7 @@ const App = () => {
           <NavItem icon={<Cpu className="w-3.5 h-3.5" />} label="Encoders" active={activeTab === 'encoders'} onClick={() => setActiveTab('encoders')} />
           <NavItem icon={<Wrench className="w-3.5 h-3.5" />} label="Tools" active={activeTab === 'tools'} onClick={() => setActiveTab('tools')} />
           <NavItem icon={<Music className="w-3.5 h-3.5" />} label="Audio" active={activeTab === 'audio'} onClick={() => setActiveTab('audio')} />
+          <NavItem icon={<Languages className="w-3.5 h-3.5" />} label="Subtitles" active={activeTab === 'subtitles'} onClick={() => setActiveTab('subtitles')} />
           <NavItem icon={<FlaskConical className="w-3.5 h-3.5" />} label="Compare" active={activeTab === 'compare'} onClick={() => setActiveTab('compare')} />
           <NavItem icon={<Settings className="w-3.5 h-3.5" />} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
         </nav>
@@ -2408,6 +2820,7 @@ const App = () => {
             {activeTab === 'queue' && <QueueSection queue={queue} />}
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
             {activeTab === 'audio' && <AudioScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} />}
+            {activeTab === 'subtitles' && <SubtitleScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} />}
             {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}
             {activeTab === 'settings' && <SettingsPage appSettings={appSettings} saveAppSettings={saveAppSettings} crtEnabled={crtEnabled} setCrtEnabled={setCrtEnabled} lightMode={lightMode} setLightMode={setLightMode} systemMetrics={systemMetrics} />}
           </div>
