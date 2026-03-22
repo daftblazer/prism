@@ -2,6 +2,9 @@
 
 PUID=${PUID:-0}
 PGID=${PGID:-0}
+UMASK=${UMASK:-002}
+
+umask "$UMASK"
 
 if [ "$PUID" != "0" ]; then
   groupmod -o -g "$PGID" prism 2>/dev/null || groupadd -o -g "$PGID" prism
