@@ -1066,7 +1066,7 @@ app.get('/api/audio-scanner/scan', async (req, res) => {
   if (!dir) return res.status(400).json({ error: 'dir required' });
   try {
     const entries = await fs.readdir(dir);
-    const mkvFiles = entries.filter(f => f.toLowerCase().endsWith('.mkv')).sort();
+    const mkvFiles = entries.filter(f => f.toLowerCase().endsWith('.mkv') && !f.toLowerCase().endsWith('.tmp.mkv')).sort();
     if (mkvFiles.length === 0) return res.status(404).json({ error: 'No MKV files found in directory' });
 
     const probeFile = (file) => new Promise((resolve, reject) => {
@@ -1141,13 +1141,18 @@ app.post('/api/audio-scanner/remove-tracks', async (req, res) => {
   const processFile = async (filePath, ids) => {
     const csv = ids.join(',');
     const tmp = filePath.replace(/\.mkv$/i, '.tmp.mkv');
-    await new Promise((resolve, reject) => {
-      const proc = spawn('mkvmerge', ['-o', tmp, '--audio-tracks', csv, filePath]);
-      let stderr = '';
-      proc.stderr.on('data', d => stderr += d.toString());
-      proc.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || 'mkvmerge failed')));
-    });
-    await fs.move(tmp, filePath, { overwrite: true });
+    try {
+      await new Promise((resolve, reject) => {
+        const proc = spawn('mkvmerge', ['-o', tmp, '--audio-tracks', csv, filePath]);
+        let stderr = '';
+        proc.stderr.on('data', d => stderr += d.toString());
+        proc.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || 'mkvmerge failed')));
+      });
+      await fs.move(tmp, filePath, { overwrite: true });
+    } catch (err) {
+      await fs.remove(tmp).catch(() => {});
+      throw err;
+    }
   };
 
   try {
@@ -1159,24 +1164,35 @@ app.post('/api/audio-scanner/remove-tracks', async (req, res) => {
       // Batch mode: keepIndices are 0-based audio track positions
       // Need to probe each file to get actual track IDs at those positions
       let processed = 0;
+      const errors = [];
       for (const f of files) {
-        const probe = await new Promise((resolve, reject) => {
-          const proc = spawn('mkvmerge', ['-J', f]);
-          let out = '';
-          proc.stdout.on('data', d => out += d.toString());
-          proc.on('close', code => {
-            if (code !== 0) return reject(new Error(`probe failed for ${f}`));
-            try { resolve(JSON.parse(out)); } catch { reject(new Error(`parse failed for ${f}`)); }
+        try {
+          const probe = await new Promise((resolve, reject) => {
+            const proc = spawn('mkvmerge', ['-J', f]);
+            let out = '';
+            proc.stdout.on('data', d => out += d.toString());
+            proc.on('close', code => {
+              if (code !== 0) return reject(new Error(`probe failed for ${path.basename(f)}`));
+              try { resolve(JSON.parse(out)); } catch { reject(new Error(`parse failed for ${path.basename(f)}`)); }
+            });
           });
-        });
-        const audioTracks = (probe.tracks || []).filter(t => t.type === 'audio');
-        const ids = keepIndices.filter(i => i < audioTracks.length).map(i => audioTracks[i].id);
-        if (ids.length === 0) continue;
-        if (ids.length === audioTracks.length) continue; // nothing to remove
-        await processFile(f, ids);
-        processed++;
+          const audioTracks = (probe.tracks || []).filter(t => t.type === 'audio');
+          const ids = keepIndices.filter(i => i < audioTracks.length).map(i => audioTracks[i].id);
+          if (ids.length === 0 || ids.length === audioTracks.length) {
+            io.emit('tool_output', `[skip] ${path.basename(f)} — ${ids.length === 0 ? 'no matching tracks' : 'nothing to remove'}\n`);
+            continue;
+          }
+          io.emit('tool_output', `[${processed + 1}/${files.length}] Removing tracks from ${path.basename(f)}...\n`);
+          await processFile(f, ids);
+          processed++;
+          io.emit('tool_output', `[done] ${path.basename(f)}\n`);
+        } catch (err) {
+          errors.push({ file: path.basename(f), error: err.message });
+          io.emit('tool_output', `[error] ${path.basename(f)}: ${err.message}\n`);
+        }
       }
-      res.json({ success: true, processed });
+      io.emit('tool_output', `\nTrack removal complete: ${processed} processed${errors.length ? `, ${errors.length} failed` : ''}\n`);
+      res.json({ success: true, processed, errors });
     } else {
       res.status(400).json({ error: 'Provide {file, keepTrackIds} or {files, keepIndices}' });
     }
@@ -1189,7 +1205,7 @@ app.get('/api/subtitle-scanner/scan', async (req, res) => {
   if (!dir) return res.status(400).json({ error: 'dir required' });
   try {
     const entries = await fs.readdir(dir);
-    const mkvFiles = entries.filter(f => f.toLowerCase().endsWith('.mkv')).sort();
+    const mkvFiles = entries.filter(f => f.toLowerCase().endsWith('.mkv') && !f.toLowerCase().endsWith('.tmp.mkv')).sort();
     if (mkvFiles.length === 0) return res.status(404).json({ error: 'No MKV files found in directory' });
 
     const probeFile = (file) => new Promise((resolve, reject) => {
@@ -1262,13 +1278,18 @@ app.post('/api/subtitle-scanner/remove-tracks', async (req, res) => {
   const processFile = async (filePath, ids) => {
     const csv = ids.join(',');
     const tmp = filePath.replace(/\.mkv$/i, '.tmp.mkv');
-    await new Promise((resolve, reject) => {
-      const proc = spawn('mkvmerge', ['-o', tmp, '--subtitle-tracks', csv, filePath]);
-      let stderr = '';
-      proc.stderr.on('data', d => stderr += d.toString());
-      proc.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || 'mkvmerge failed')));
-    });
-    await fs.move(tmp, filePath, { overwrite: true });
+    try {
+      await new Promise((resolve, reject) => {
+        const proc = spawn('mkvmerge', ['-o', tmp, '--subtitle-tracks', csv, filePath]);
+        let stderr = '';
+        proc.stderr.on('data', d => stderr += d.toString());
+        proc.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || 'mkvmerge failed')));
+      });
+      await fs.move(tmp, filePath, { overwrite: true });
+    } catch (err) {
+      await fs.remove(tmp).catch(() => {});
+      throw err;
+    }
   };
 
   try {
@@ -1277,24 +1298,35 @@ app.post('/api/subtitle-scanner/remove-tracks', async (req, res) => {
       res.json({ success: true, processed: 1 });
     } else if (files && keepIndices) {
       let processed = 0;
+      const errors = [];
       for (const f of files) {
-        const probe = await new Promise((resolve, reject) => {
-          const proc = spawn('mkvmerge', ['-J', f]);
-          let out = '';
-          proc.stdout.on('data', d => out += d.toString());
-          proc.on('close', code => {
-            if (code !== 0) return reject(new Error(`probe failed for ${f}`));
-            try { resolve(JSON.parse(out)); } catch { reject(new Error(`parse failed for ${f}`)); }
+        try {
+          const probe = await new Promise((resolve, reject) => {
+            const proc = spawn('mkvmerge', ['-J', f]);
+            let out = '';
+            proc.stdout.on('data', d => out += d.toString());
+            proc.on('close', code => {
+              if (code !== 0) return reject(new Error(`probe failed for ${path.basename(f)}`));
+              try { resolve(JSON.parse(out)); } catch { reject(new Error(`parse failed for ${path.basename(f)}`)); }
+            });
           });
-        });
-        const subTracks = (probe.tracks || []).filter(t => t.type === 'subtitles');
-        const ids = keepIndices.filter(i => i < subTracks.length).map(i => subTracks[i].id);
-        if (ids.length === 0) continue;
-        if (ids.length === subTracks.length) continue;
-        await processFile(f, ids);
-        processed++;
+          const subTracks = (probe.tracks || []).filter(t => t.type === 'subtitles');
+          const ids = keepIndices.filter(i => i < subTracks.length).map(i => subTracks[i].id);
+          if (ids.length === 0 || ids.length === subTracks.length) {
+            io.emit('tool_output', `[skip] ${path.basename(f)} — ${ids.length === 0 ? 'no matching tracks' : 'nothing to remove'}\n`);
+            continue;
+          }
+          io.emit('tool_output', `[${processed + 1}/${files.length}] Removing tracks from ${path.basename(f)}...\n`);
+          await processFile(f, ids);
+          processed++;
+          io.emit('tool_output', `[done] ${path.basename(f)}\n`);
+        } catch (err) {
+          errors.push({ file: path.basename(f), error: err.message });
+          io.emit('tool_output', `[error] ${path.basename(f)}: ${err.message}\n`);
+        }
       }
-      res.json({ success: true, processed });
+      io.emit('tool_output', `\nTrack removal complete: ${processed} processed${errors.length ? `, ${errors.length} failed` : ''}\n`);
+      res.json({ success: true, processed, errors });
     } else {
       res.status(400).json({ error: 'Provide {file, keepTrackIds} or {files, keepIndices}' });
     }
