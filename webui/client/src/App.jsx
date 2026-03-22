@@ -1360,8 +1360,8 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
     if (c.includes('opus')) return 'Opus';
     if (c.includes('flac')) return 'FLAC';
     if (c.includes('aac')) return 'AAC';
-    if (c.includes('ac-3') || c === 'ac3') return 'AC3';
     if (c.includes('e-ac-3') || c === 'eac3') return 'EAC3';
+    if (c.includes('ac-3') || c === 'ac3') return 'AC3';
     if (c.includes('truehd')) return 'TrueHD';
     if (c.includes('dts-hd')) return 'DTS-HD MA';
     if (c.includes('dts')) return 'DTS';
