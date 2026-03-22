@@ -1036,14 +1036,17 @@ const FileBrowser = ({ currentPath, onNavigate, onSelect, onFileSelect, selected
 const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite }) => {
   const [formData, setFormData] = useState({ encoder: encoders[0]?.path || '', crf: '18', preset: '4', tune: '0', custom_flags: '', subfolder: '', auto_crop: false, rename_audio: false });
   const [path, setPath] = useState('/');
+  const [selectedFile, setSelectedFile] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { browse(path); }, [path]);
   const browse = async (p) => { setLoading(true); try { const res = await axios.get(`/api/browse?path=${encodeURIComponent(p)}`); setItems(res.data); } catch (e) { console.error(e); } finally { setLoading(false); } };
+  const handleFileSelect = (filePath) => { setSelectedFile(prev => prev === filePath ? null : filePath); };
+  const inputTarget = selectedFile || path;
   const handleSubmit = async (e) => {
-    e.preventDefault(); if (path === '/') return alert('Select a mount point folder first!');
-    try { await axios.post('/api/queue', { ...formData, input_folder: path }); onSuccess(); } catch (e) { alert(e.message); }
+    e.preventDefault(); if (inputTarget === '/') return alert('Select a folder or video file first!');
+    try { await axios.post('/api/queue', { ...formData, input_folder: inputTarget }); onSuccess(); } catch (e) { alert(e.message); }
   };
 
   const inputCls = "w-full border border-sf bg-void p-3 text-xs font-bold text-steel font-sys";
@@ -1052,12 +1055,12 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90">
       <div className="border border-sf w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col bg-void-panel shadow-[0_0_60px_rgba(255,152,48,0.05)]">
         <div className="px-6 py-4 border-b border-sf flex justify-between items-center bg-void">
-          <h3 className="nerv-title text-nerv text-lg">Add Batch</h3>
+          <h3 className="nerv-title text-nerv text-lg">Add to Queue</h3>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-steel-dim hover:text-alert-red transition-all"><X className="w-4 h-4" /></button>
         </div>
         <div className="flex-1 overflow-auto flex">
           <div className="w-1/2 border-r border-sf flex flex-col bg-void">
-            <FileBrowser currentPath={path} onNavigate={setPath} items={items} loading={loading} favorites={favorites} onToggleFavorite={toggleFavorite} />
+            <FileBrowser currentPath={path} onNavigate={(p) => { setPath(p); setSelectedFile(null); }} onFileSelect={handleFileSelect} selectedFile={selectedFile} items={items} loading={loading} favorites={favorites} onToggleFavorite={toggleFavorite} />
           </div>
           <form onSubmit={handleSubmit} className="w-1/2 p-8 space-y-6 bg-void-panel">
             <div className="grid grid-cols-2 gap-4">
@@ -1074,7 +1077,7 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
               <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.auto_crop} onChange={e=>setFormData({...formData, auto_crop:e.target.checked})} className="w-4 h-4 accent-nerv" /><span className="text-xs font-bold text-steel">Auto-Crop Black Bars</span></label>
               <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.rename_audio} onChange={e=>setFormData({...formData, rename_audio:e.target.checked})} className="w-4 h-4 accent-nerv" /><span className="text-xs font-bold text-steel">Rename Audio Tracks</span></label>
             </div>
-            <button type="submit" disabled={path==='/'} className="w-full py-4 font-bold text-sm transition-all active:scale-[0.98] uppercase tracking-wider text-black disabled:opacity-30 bg-nerv hover:bg-nerv-hot">Add Batch to Queue</button>
+            <button type="submit" disabled={inputTarget==='/'} className="w-full py-4 font-bold text-sm transition-all active:scale-[0.98] uppercase tracking-wider text-black disabled:opacity-30 bg-nerv hover:bg-nerv-hot">{selectedFile ? 'Encode Single File' : 'Add Batch to Queue'}</button>
           </form>
         </div>
       </div>
@@ -2908,7 +2911,7 @@ const App = () => {
         </nav>
         <div className="p-3 space-y-2 border-t border-sf">
           <button onClick={() => setIsModalOpen(true)} disabled={testRunning} className={cn("w-full flex items-center justify-center gap-2 py-2.5 font-bold text-xs transition-all active:scale-95 tracking-wider uppercase", testRunning ? "bg-steel-dim/30 text-steel-dim cursor-not-allowed" : "bg-nerv text-black hover:bg-nerv-hot")}>
-            <Plus className="w-3.5 h-3.5" />Add Batch
+            <Plus className="w-3.5 h-3.5" />Add Encode
           </button>
         </div>
       </aside>
