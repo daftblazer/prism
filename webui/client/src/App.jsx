@@ -156,7 +156,8 @@ const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled,
               <p className="text-[11px] text-steel-dim mt-0.5">Get notified on Discord, Slack, or any URL when encodes complete or fail</p>
             </div>
             <button onClick={() => {
-              const webhooks = [...(appSettings.webhooks || []), { id: crypto.randomUUID(), name: '', url: '', enabled: true }];
+              const id = 'wh-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+              const webhooks = [...(appSettings.webhooks || []), { id, name: '', url: '', enabled: true }];
               saveAppSettings({ webhooks });
             }} className={cn(toggleBase, toggleOff, "hover:border-data-green/30 hover:bg-data-green/10 hover:text-data-green")}>
               <Plus className="w-4 h-4 inline -mt-0.5 mr-1" />Add
