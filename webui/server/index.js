@@ -1753,6 +1753,7 @@ app.post('/api/test-encode', async (req, res) => {
             SHOT_COUNT: String(screenshotCount || 6),
             SHOT_FMT: 'png',
             SHOT_PREFIX: variant.label.trim(),
+            SOURCE_DURATION: String(sampleProbe.duration),
           };
           const child = spawn('bash', [path.join(TOOLS_DIR, 'generate-screenshots.sh')], { env, detached: true });
           currentTestEncodeChild = child;

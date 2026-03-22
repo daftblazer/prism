@@ -18,6 +18,7 @@ IFS=$'\n\t'
 : "${ALL:=0}"  # set ALL=1 to process all MKVs; default is first only
 : "${SHOT_PREFIX:=}"  # optional: override screenshot filename prefix (e.g. "MyVariant")
 : "${INPUT_FILE:=}"   # optional: direct path to a single file (skips OUTPUT_DIR scan)
+: "${SOURCE_DURATION:=}"  # optional: use this duration for timestamp calc (keeps source/variant in sync)
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
 need "$FFMPEG_BIN"
@@ -45,7 +46,11 @@ for sample in "${mkvs[@]}"; do
   prefix="${SHOT_PREFIX:-$safe_base}"
   out_prefix="$SHOT_DIR/${prefix}_shot"
 
-  duration="$($FFPROBE_BIN -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 -i "$sample")"
+  if [[ -n "$SOURCE_DURATION" ]]; then
+    duration="$SOURCE_DURATION"
+  else
+    duration="$($FFPROBE_BIN -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 -i "$sample")"
+  fi
   if [[ -z "$duration" ]]; then
     echo "Could not read duration from $sample; skipping." >&2
     continue
@@ -98,7 +103,7 @@ PY
 )
     ts=$(printf "%06.2f" "$time")
     out="${out_prefix}$(printf '%03d' "$idx").${SHOT_FMT}"
-    if "$FFMPEG_BIN" -y -ss "$ts" -i "$sample" -frames:v 1 \
+    if "$FFMPEG_BIN" -y -i "$sample" -ss "$ts" -frames:v 1 \
         -vf "$vf_color" -pix_fmt rgb24 \
         -f image2 -update 1 "$out" >/dev/null 2>&1; then
       echo "  Saved $(basename "$out") (t=$ts)"
