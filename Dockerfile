@@ -6,7 +6,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ffmpeg mkvtoolnix mediainfo build-essential cmake ninja-build \
       nasm yasm pkg-config git nodejs npm python3 python3-pip \
-      curl ca-certificates wget tmux htop procps file \
+      curl ca-certificates wget tmux htop procps file gosu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -40,4 +40,4 @@ RUN mkdir -p /input /output /config/encoders
 
 EXPOSE 3000
 
-CMD ["node", "webui/server/index.js"]
+ENTRYPOINT ["/app/entrypoint.sh"]

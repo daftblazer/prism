@@ -12,6 +12,8 @@ services:
       - ./config:/config
     restart: unless-stopped
     environment:
+      - PUID=1000
+      - PGID=1000
       - PORT=3000
       - INPUT_DIR=/input
       - OUTPUT_DIR=/output
