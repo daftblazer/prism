@@ -308,7 +308,8 @@ const HistoryPage = () => {
                     <span>{fmtDate(entry.completedAt)}</span>
                     {entry.type === 'encode' && (<>
                       <span>{entry.encoder}</span>
-                      <span>CRF {entry.crf} / P{entry.preset}</span>
+                      <span>CRF {entry.crf} / P{entry.preset}{entry.tune && entry.tune !== '0' ? ` / T${entry.tune}` : ''}</span>
+                      {entry.customFlags && <span className="text-wire-cyan">{entry.customFlags}</span>}
                       <span>{entry.files} file{entry.files !== 1 ? 's' : ''}</span>
                       <span>{entry.duration}</span>
                       <span>{entry.totalSize}</span>
