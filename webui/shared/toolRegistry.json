@@ -303,6 +303,17 @@
     ]
   },
   {
+    "id": "verify_integrity",
+    "name": "Verify Integrity",
+    "description": "Fully decode all video files in a directory and report any corruption or stream errors.",
+    "category": "analysis",
+    "mode": "read-only",
+    "script": "verify-integrity.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "" }
+    ]
+  },
+  {
     "id": "rename_video_track",
     "name": "Rename Video Track",
     "description": "Set the video track name on all MKVs in a directory.",
