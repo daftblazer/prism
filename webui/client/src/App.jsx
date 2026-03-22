@@ -1233,6 +1233,34 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
     return file.audioTracks.some(t => names[t.index] !== undefined && names[t.index] !== t.name);
   };
 
+  const channelLabel = (ch) => ({ 1: 'Mono', 2: '2.0', 6: '5.1', 8: '7.1' }[ch] || `${ch}ch`);
+  const codecLabel = (codec) => {
+    const c = codec.toLowerCase();
+    if (c.includes('opus')) return 'Opus';
+    if (c.includes('flac')) return 'FLAC';
+    if (c.includes('aac')) return 'AAC';
+    if (c.includes('ac-3') || c === 'ac3') return 'AC3';
+    if (c.includes('e-ac-3') || c === 'eac3') return 'EAC3';
+    if (c.includes('truehd')) return 'TrueHD';
+    if (c.includes('dts-hd')) return 'DTS-HD MA';
+    if (c.includes('dts')) return 'DTS';
+    if (c.includes('vorbis')) return 'Vorbis';
+    if (c.includes('mp3') || c.includes('mpeg')) return 'MP3';
+    if (c.includes('pcm')) return 'PCM';
+    return codec;
+  };
+  const autoNameTracks = (filePath) => {
+    const file = results?.files?.find(f => f.path === filePath);
+    if (!file) return;
+    const checks = checkedTracks[filePath] || {};
+    const newNames = { ...(editedNames[filePath] || {}) };
+    file.audioTracks.forEach(t => {
+      if (checks[t.id] === false) return; // skip unchecked
+      newNames[t.index] = `${langLabel(t.language)} ${channelLabel(t.channels)} (${codecLabel(t.codec)})`;
+    });
+    setEditedNames(prev => ({ ...prev, [filePath]: newNames }));
+  };
+
   const toggleTrackCheck = (filePath, trackId) => {
     setCheckedTracks(prev => ({ ...prev, [filePath]: { ...(prev[filePath] || {}), [trackId]: !(prev[filePath]?.[trackId]) } }));
   };
@@ -1434,6 +1462,9 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
                       })}
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
+                      <button onClick={() => autoNameTracks(file.path)} className="flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase border border-wire-cyan/50 text-wire-cyan hover:bg-wire-cyan/10 transition-all">
+                        <Edit3 className="w-3 h-3" /> Auto Name
+                      </button>
                       <button onClick={() => handleSave(file.path)} disabled={!hasChanges(file.path) || saving[file.path]} className={cn("flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase transition-all", hasChanges(file.path) ? "bg-nerv text-black hover:bg-nerv-hot" : "bg-steel-dim/20 text-steel-dim cursor-not-allowed")}>
                         <Save className="w-3 h-3" /> {saving[file.path] ? 'Saving...' : 'Save Names'}
                       </button>
