@@ -301,5 +301,19 @@
       { "name": "TRACK_NAMES", "label": "Track Names (pipe-separated)", "type": "string", "default": "" },
       { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
     ]
+  },
+  {
+    "id": "rename_video_track",
+    "name": "Rename Video Track",
+    "description": "Set the video track name on all MKVs in a directory.",
+    "category": "metadata",
+    "mode": "in-place",
+    "script": "rename-video-track.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" },
+      { "name": "VIDEO_NAME", "label": "Video Track Name", "type": "string", "default": "" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
   }
 ]

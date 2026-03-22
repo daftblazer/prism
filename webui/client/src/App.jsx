@@ -1003,7 +1003,7 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
 
 const AUDIO_TAB_TOOL_IDS = ['swap_audio_order', 'shift_audio_offset', 'set_default_audio', 'strip_compat_audio', 'keep_japanese_audio', 'mux_in_english', 'mux_commentary', 'rename_tracks', 'mux_audio_tracks'];
 
-const AUDIO_TOOL_STRIP_IDS = ['rename_tracks', 'set_default_audio', 'swap_audio_order', 'shift_audio_offset', 'mux_audio_tracks'];
+const AUDIO_TOOL_STRIP_IDS = ['set_default_audio', 'swap_audio_order', 'shift_audio_offset', 'mux_audio_tracks'];
 
 const SUBTITLE_TAB_TOOL_IDS = ['swap_subtitle_order', 'shift_subtitles_offset', 'set_default_subtitle', 'rename_subtitles'];
 const SUBTITLE_TOOL_STRIP_IDS = ['set_default_subtitle', 'swap_subtitle_order', 'shift_subtitles_offset'];
