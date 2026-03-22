@@ -166,6 +166,109 @@ async function saveSettings(settings) {
   try { await fs.ensureDir(CONFIG_DIR); await fs.writeJson(SETTINGS_FILE, settings); } catch (err) { console.error('Settings save error:', err); }
 }
 
+// --- Webhook Notifications ---
+function formatDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+function formatSize(bytes) {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  return `${(bytes / 1e3).toFixed(0)} KB`;
+}
+
+function isDiscordWebhook(url) {
+  return /discord(?:app)?\.com\/api\/webhooks\//.test(url);
+}
+
+function buildDiscordPayload(event, data) {
+  if (event === 'batch_complete') {
+    return {
+      embeds: [{
+        title: 'Encode Complete',
+        color: 0x00c853,
+        fields: [
+          { name: 'Folder', value: data.folder, inline: false },
+          { name: 'Files', value: `${data.files}`, inline: true },
+          { name: 'Encoder', value: data.encoder, inline: true },
+          { name: 'Duration', value: data.duration, inline: true },
+          { name: 'Total Size', value: data.totalSize, inline: true },
+        ],
+        timestamp: data.timestamp,
+        footer: { text: 'PRISM' },
+      }],
+    };
+  }
+  if (event === 'encode_error') {
+    return {
+      embeds: [{
+        title: 'Encode Error',
+        color: 0xff1744,
+        fields: [
+          { name: 'Folder', value: data.folder, inline: false },
+          { name: 'File', value: data.file, inline: true },
+          { name: 'Exit Code', value: `${data.exitCode}`, inline: true },
+        ],
+        timestamp: data.timestamp,
+        footer: { text: 'PRISM' },
+      }],
+    };
+  }
+  if (event === 'test') {
+    return {
+      embeds: [{
+        title: 'PRISM Webhook Test',
+        description: 'Connection established — notifications are working.',
+        color: 0x448aff,
+        timestamp: new Date().toISOString(),
+        footer: { text: 'PRISM' },
+      }],
+    };
+  }
+  return { content: JSON.stringify({ event, ...data }) };
+}
+
+async function sendWebhookNotification(event, data) {
+  try {
+    const settings = await loadSettings();
+    const webhooks = settings.webhooks || [];
+    for (const wh of webhooks) {
+      if (!wh.enabled || !wh.url) continue;
+      const body = isDiscordWebhook(wh.url) ? buildDiscordPayload(event, data) : { event, ...data };
+      fetch(wh.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).catch(err => console.error(`Webhook send failed (${wh.name}):`, err.message));
+    }
+  } catch (err) {
+    console.error('Webhook notification error:', err.message);
+  }
+}
+
+async function getDirectorySize(dir) {
+  let total = 0;
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        total += await getDirectorySize(fullPath);
+      } else {
+        const stat = await fs.stat(fullPath);
+        total += stat.size;
+      }
+    }
+  } catch { /* ignore */ }
+  return total;
+}
+
 const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
 
 function probeVideo(filePath) {
@@ -393,6 +496,7 @@ class Worker {
   async processBatch(batch) {
     const { input_folder } = batch;
     if (!(await fs.pathExists(input_folder))) { this.log(`PATH NOT FOUND — ${input_folder} — aborting batch`, 'error'); return; }
+    const batchStartTime = Date.now();
     const stats = await fs.stat(input_folder);
     let files = [];
     if (stats.isDirectory()) {
@@ -462,7 +566,23 @@ class Worker {
       if (next) running.set(next.slotIndex, next.promise);
     }
 
-    if (!this.stopping) io.emit('batch_complete', { folder: batch.input_folder });
+    if (!this.stopping) {
+      io.emit('batch_complete', { folder: batch.input_folder });
+      // Send webhook notification
+      const elapsed = Date.now() - batchStartTime;
+      const defaultOutput = path.join(__dirname, '..', '..', 'output');
+      const outputRoot = process.env.OUTPUT_DIR || defaultOutput;
+      const outputDir = batch.subfolder ? path.join(outputRoot, batch.subfolder) : outputRoot;
+      const totalSize = await getDirectorySize(outputDir).catch(() => 0);
+      sendWebhookNotification('batch_complete', {
+        timestamp: new Date().toISOString(),
+        folder: path.basename(batch.input_folder),
+        encoder: batch.encoder || 'unknown',
+        files: this.totalFiles,
+        duration: formatDuration(elapsed),
+        totalSize: formatSize(totalSize),
+      });
+    }
   }
 
   emitParallelStatus(batch) {
@@ -581,8 +701,17 @@ class Worker {
       child.stderr.on('data', (d) => { const out = d.toString(); this.log(`${slotPrefix}${out}`, 'stderr'); parseOutput(out); });
 
       child.on('close', (code) => {
-        if (code !== 0) this.log(`${slotPrefix}ENCODE FAILED — ${path.basename(file)} — exit code ${code}`, 'error');
-        else this.log(`${slotPrefix}ENCODE COMPLETE — ${path.basename(file)} — all systems nominal`, 'info');
+        if (code !== 0) {
+          this.log(`${slotPrefix}ENCODE FAILED — ${path.basename(file)} — exit code ${code}`, 'error');
+          sendWebhookNotification('encode_error', {
+            timestamp: new Date().toISOString(),
+            folder: path.basename(batch.input_folder),
+            file: path.basename(file),
+            exitCode: code,
+          });
+        } else {
+          this.log(`${slotPrefix}ENCODE COMPLETE — ${path.basename(file)} — all systems nominal`, 'info');
+        }
         resolve();
       });
     });
@@ -890,6 +1019,29 @@ app.get('/api/settings', async (req, res) => {
 });
 app.post('/api/settings', async (req, res) => {
   try { const settings = { ...(await loadSettings()), ...req.body }; await saveSettings(settings); res.json(settings); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- Webhook Test API ---
+app.post('/api/webhooks/test', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+  try {
+    const body = isDiscordWebhook(url)
+      ? buildDiscordPayload('test', {})
+      : { event: 'test', message: 'PRISM webhook test — connection established.', timestamp: new Date().toISOString() };
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      return res.status(resp.status).json({ error: `Webhook returned ${resp.status}`, detail: text });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Favorites API ---

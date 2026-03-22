@@ -6,7 +6,7 @@ import {
   RefreshCcw, CheckCircle2, Clock, AlertCircle, CornerLeftUp, HardDrive,
   Settings, Wrench, Play, Search, StopCircle, FileVideo, File, Star,
   FlaskConical, Trash2, HelpCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Columns, Image, Pause,
-  Music, Save, Edit3, AlertTriangle, Languages
+  Music, Save, Edit3, AlertTriangle, Languages, Bell, Send
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -138,6 +138,83 @@ const SettingsPage = ({ appSettings, saveAppSettings, crtEnabled, setCrtEnabled,
           </div>
         </div>
       </div>
+      <div>
+        <h3 className="nerv-title text-nerv text-sm mb-4">Notifications</h3>
+        <div className="border border-sf bg-void-panel">
+          {(appSettings?.webhooks || []).map((wh) => (
+            <WebhookRow key={wh.id} webhook={wh} onUpdate={(updated) => {
+              const webhooks = (appSettings.webhooks || []).map(w => w.id === updated.id ? updated : w);
+              saveAppSettings({ webhooks });
+            }} onDelete={() => {
+              const webhooks = (appSettings.webhooks || []).filter(w => w.id !== wh.id);
+              saveAppSettings({ webhooks });
+            }} />
+          ))}
+          <div className={cn(rowCls, "px-4 border-b-0")}>
+            <div>
+              <span className={labelCls}>Add Webhook</span>
+              <p className="text-[11px] text-steel-dim mt-0.5">Get notified on Discord, Slack, or any URL when encodes complete or fail</p>
+            </div>
+            <button onClick={() => {
+              const webhooks = [...(appSettings.webhooks || []), { id: crypto.randomUUID(), name: '', url: '', enabled: true }];
+              saveAppSettings({ webhooks });
+            }} className={cn(toggleBase, toggleOff, "hover:border-data-green/30 hover:bg-data-green/10 hover:text-data-green")}>
+              <Plus className="w-4 h-4 inline -mt-0.5 mr-1" />Add
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const WebhookRow = ({ webhook, onUpdate, onDelete }) => {
+  const [name, setName] = useState(webhook.name);
+  const [url, setUrl] = useState(webhook.url);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+
+  useEffect(() => { setName(webhook.name); setUrl(webhook.url); }, [webhook.name, webhook.url]);
+
+  const save = (overrides = {}) => onUpdate({ ...webhook, name: overrides.name ?? name, url: overrides.url ?? url });
+  const handleTest = async () => {
+    if (!url) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      await axios.post('/api/webhooks/test', { url });
+      setTestResult('success');
+    } catch (err) {
+      setTestResult(err.response?.data?.error || 'Failed');
+    }
+    setTesting(false);
+    setTimeout(() => setTestResult(null), 4000);
+  };
+
+  const inputCls = "flex-1 min-w-0 border border-sf bg-void px-3 py-1.5 text-xs font-bold text-steel font-sys";
+  const rowCls = "flex items-center justify-between py-4 border-b border-sf";
+  const toggleBase = "px-3 py-1.5 text-[15px] font-bold uppercase tracking-wider transition-all border";
+  const toggleOff = "border-sf bg-void text-steel-dim";
+
+  return (
+    <div className="px-4 py-4 border-b border-sf space-y-3">
+      <div className="flex items-center gap-3">
+        <Bell className="w-4 h-4 text-nerv shrink-0" />
+        <input type="text" value={name} onChange={e => setName(e.target.value)} onBlur={() => save()} onKeyDown={e => e.key === 'Enter' && save()} placeholder="Webhook name" className={cn(inputCls, "w-40 flex-none")} />
+        <input type="text" value={url} onChange={e => setUrl(e.target.value)} onBlur={() => save()} onKeyDown={e => e.key === 'Enter' && save()} placeholder="https://discord.com/api/webhooks/..." className={cn(inputCls)} />
+        <button onClick={handleTest} disabled={testing || !url} title="Send test notification" className={cn(toggleBase, "px-2 py-1.5 shrink-0", testing ? "border-wire-cyan/30 bg-wire-cyan/10 text-wire-cyan" : testResult === 'success' ? "border-data-green/30 bg-data-green/10 text-data-green" : testResult ? "border-alert-red/30 bg-alert-red/10 text-alert-red" : toggleOff, "hover:border-wire-cyan/30 hover:bg-wire-cyan/10 hover:text-wire-cyan disabled:opacity-50")}>
+          {testing ? <RefreshCcw className="w-3.5 h-3.5 animate-spin" /> : testResult === 'success' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+        </button>
+        <button onClick={() => onUpdate({ ...webhook, enabled: !webhook.enabled })} className={cn(toggleBase, "px-2 py-1.5 shrink-0 text-[11px]", webhook.enabled ? "border-data-green/30 bg-data-green/10 text-data-green" : toggleOff)}>
+          {webhook.enabled ? 'On' : 'Off'}
+        </button>
+        <button onClick={onDelete} title="Remove webhook" className={cn(toggleBase, "px-2 py-1.5 shrink-0", toggleOff, "hover:border-alert-red/30 hover:bg-alert-red/10 hover:text-alert-red")}>
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {testResult && testResult !== 'success' && (
+        <p className="text-[11px] text-alert-red font-bold ml-7">{testResult}</p>
+      )}
     </div>
   );
 };
