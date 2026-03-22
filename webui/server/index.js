@@ -72,7 +72,11 @@ function computeThreadAllocations(totalThreads, instanceCount, reservedCores, th
 
     // Assign instances to CCDs
     const allocations = [];
-    if (instanceCount <= ccdKeys.length) {
+    if (instanceCount === 1) {
+      // Single instance — use all available cores across all CCDs
+      const threads = availableCores.flatMap(c => c.threads).sort((a, b) => a - b);
+      allocations.push({ cpuList: formatCpuList(threads), threadCount: threads.length });
+    } else if (instanceCount <= ccdKeys.length) {
       // One instance per CCD — distribute cores evenly across selected CCDs
       const selectedCCDs = ccdKeys.slice(0, instanceCount);
       for (const ccdIdx of selectedCCDs) {
