@@ -594,6 +594,9 @@ const Dashboard = ({ status, queue, logs, logRef, setLogs, autoScroll, setAutoSc
           {/* Title — full width, allowed to wrap */}
           <div className="px-5 pb-3">
             <h3 className="text-lg font-bold text-steel leading-snug break-words">{activeJob?.name || 'Encode Operation'}</h3>
+            {isEncoding && status?.instances?.length === 1 && status.instances[0].currentFile && (
+              <p className="text-sm font-bold text-steel-dim mt-1 truncate">{status.instances[0].currentFile}</p>
+            )}
             {isPaused && !isTestEncode && <p className="text-sm font-bold text-nerv-dim mt-1">Job is waiting to resume</p>}
           </div>
           {/* Multi-instance cards */}
