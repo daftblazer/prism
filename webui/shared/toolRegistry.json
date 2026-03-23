@@ -326,5 +326,18 @@
       { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
       { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
     ]
+  },
+  {
+    "id": "set_title_from_filename",
+    "name": "Set Title from Filename",
+    "description": "Set the MKV container title by extracting it from each file's name (strips group tags, metadata, quality markers).",
+    "category": "metadata",
+    "mode": "in-place",
+    "script": "set-title-from-filename.sh",
+    "envVars": [
+      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "Output" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
   }
 ]
