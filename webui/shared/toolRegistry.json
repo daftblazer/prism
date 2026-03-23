@@ -339,5 +339,18 @@
       { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" },
       { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
     ]
+  },
+  {
+    "id": "qc_check",
+    "name": "QC Check",
+    "description": "Pre-release quality control — shows container title, video/audio/subtitle tracks, defaults, chapters, attachments, and flags issues.",
+    "category": "analysis",
+    "mode": "read-only",
+    "script": "qc-check.sh",
+    "envVars": [
+      { "name": "SOURCE_FILE", "label": "Source File (single file)", "type": "file", "default": "" },
+      { "name": "INPUT_DIR", "label": "Input Directory (all files)", "type": "path", "default": "Output" },
+      { "name": "TARGET_GLOB", "label": "File Pattern", "type": "string", "default": "*.mkv" }
+    ]
   }
 ]
