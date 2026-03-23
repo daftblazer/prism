@@ -241,8 +241,7 @@
     "script": "generate-release-md.sh",
     "envVars": [
       { "name": "OUTPUT_DIR", "label": "MKV Directory", "type": "path", "default": "Output" },
-      { "name": "SAMPLE_FILE", "label": "Sample MKV File (optional)", "type": "string", "default": "" },
-      { "name": "OUT_MD", "label": "Output Markdown Filename", "type": "string", "default": "release.md" }
+      { "name": "SAMPLE_FILE", "label": "Sample MKV File (optional)", "type": "string", "default": "" }
     ]
   },
   {
@@ -254,7 +253,7 @@
     "script": "generate-screenshots.sh",
     "envVars": [
       { "name": "OUTPUT_DIR", "label": "MKV Directory", "type": "path", "default": "Output" },
-      { "name": "SHOT_DIR", "label": "Screenshot Output Directory", "type": "string", "default": "Screenshots" },
+      { "name": "SHOT_DIR", "label": "Screenshot Output Directory", "type": "string", "default": "" },
       { "name": "SHOT_COUNT", "label": "Screenshots Per File", "type": "number", "default": "8" },
       { "name": "SHOT_FMT", "label": "Image Format", "type": "string", "default": "png" }
     ]
