@@ -6,13 +6,23 @@ IFS=$'\n\t'
 # Reports any corruption, truncation, or stream errors.
 
 INPUT_DIR="${INPUT_DIR:-}"
-if [[ -z "$INPUT_DIR" || ! -d "$INPUT_DIR" ]]; then
-  echo "ERROR: INPUT_DIR is not set or is not a directory."
+SOURCE_FILE="${SOURCE_FILE:-}"
+
+shopt -s nullglob
+
+if [[ -n "$SOURCE_FILE" ]]; then
+  if [[ ! -f "$SOURCE_FILE" ]]; then
+    echo "ERROR: SOURCE_FILE not found: $SOURCE_FILE"
+    exit 1
+  fi
+  files=("$SOURCE_FILE")
+elif [[ -n "$INPUT_DIR" && -d "$INPUT_DIR" ]]; then
+  files=("$INPUT_DIR"/*.{mkv,mp4,avi,ts,mov,webm})
+else
+  echo "ERROR: Set SOURCE_FILE for a single file or INPUT_DIR for a directory."
   exit 1
 fi
 
-shopt -s nullglob
-files=("$INPUT_DIR"/*.{mkv,mp4,avi,ts,mov,webm})
 if [[ ${#files[@]} -eq 0 ]]; then
   echo "No video files found in $INPUT_DIR"
   exit 1

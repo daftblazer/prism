@@ -10,7 +10,7 @@ IFS=$'\n\t'
 # Output: Screenshots/<basename>_shotNNN.<ext> for each file
 
 : "${OUTPUT_DIR:=Output}"
-: "${SHOT_DIR:=Screenshots}"
+: "${SHOT_DIR:=${OUTPUT_DIR}/Screenshots}"
 : "${SHOT_COUNT:=8}"
 : "${SHOT_FMT:=png}"
 : "${FFMPEG_BIN:=ffmpeg}"

@@ -21,9 +21,9 @@ ok() { echo "  ✓  $1"; }
 human_size() {
   local bytes="$1"
   if (( bytes >= 1073741824 )); then
-    printf '%.2f GB' "$(echo "$bytes / 1073741824" | bc -l)"
+    printf '%.2f GB' "$(awk "BEGIN{printf \"%.2f\", $bytes/1073741824}")"
   elif (( bytes >= 1048576 )); then
-    printf '%.1f MB' "$(echo "$bytes / 1048576" | bc -l)"
+    printf '%.1f MB' "$(awk "BEGIN{printf \"%.1f\", $bytes/1048576}")"
   else
     printf '%d KB' "$((bytes / 1024))"
   fi
@@ -63,7 +63,7 @@ check_file() {
   # duration from mkvmerge -J is in nanoseconds
   local dur_secs=0
   if [[ "$duration" != "0" && "$duration" != "null" ]]; then
-    dur_secs="$(echo "$duration / 1000000000" | bc -l)"
+    dur_secs="$(awk "BEGIN{print int($duration/1000000000)}")"
   fi
 
   echo ""

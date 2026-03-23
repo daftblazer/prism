@@ -310,7 +310,8 @@
     "mode": "read-only",
     "script": "verify-integrity.sh",
     "envVars": [
-      { "name": "INPUT_DIR", "label": "Input Directory", "type": "path", "default": "" }
+      { "name": "SOURCE_FILE", "label": "Source File (single file)", "type": "file", "default": "" },
+      { "name": "INPUT_DIR", "label": "Input Directory (all files)", "type": "path", "default": "" }
     ]
   },
   {

@@ -11,7 +11,7 @@ IFS=$'\n\t'
 
 : "${OUTPUT_DIR:=Output}"
 : "${SAMPLE_FILE:=}"
-: "${OUT_MD:=release.md}"
+: "${OUT_MD:=${OUTPUT_DIR}/release.md}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
 need mkvmerge
