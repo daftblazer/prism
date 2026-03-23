@@ -6,7 +6,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ffmpeg mkvtoolnix mediainfo build-essential cmake ninja-build \
       nasm yasm pkg-config git nodejs npm python3 python3-pip \
-      curl ca-certificates wget tmux htop procps file gosu \
+      curl ca-certificates wget tmux htop procps file gosu jq \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
