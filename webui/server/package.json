@@ -1,6 +1,6 @@
 {
   "name": "prism-webui-server",
-  "version": "0.2.0-nightly.20260322",
+  "version": "0.2.0-nightly.20260323",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

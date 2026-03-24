@@ -1953,7 +1953,7 @@ app.delete('/api/cleanup/work-dirs', async (req, res) => {
   }
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '0.2.0-nightly.20260322', channel: 'nightly' }));
+app.get('/api/version', (req, res) => res.json({ version: '0.2.0-nightly.20260323', channel: 'nightly' }));
 
 if (fs.existsSync(frontendDist)) app.get('*', (req, res) => { if (!req.path.startsWith('/api')) res.sendFile(path.join(frontendDist, 'index.html')); });
 
