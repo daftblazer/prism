@@ -19,6 +19,9 @@ Options:
   --crop "W:H:X:Y"     Manual crop (overrides auto-crop if provided)
   --rename-audio 0|1   Rename audio tracks with pretty names (default: 0)
   --custom-flags "..." Extra encoder flags
+  --deband 0|1         Enable/disable deband filter (default: 0)
+  --deband-range N     Deband sample range (default: FFmpeg default 16)
+  --deband-threshold N Deband threshold for all planes (default: FFmpeg default 0.02)
   --overwrite 0|1      Overwrite existing output (default: 0)
   -h, --help           Show help
 EOF
@@ -47,6 +50,9 @@ AUTO_CROP=1
 MANUAL_CROP=""
 RENAME_AUDIO=0
 CUSTOM_FLAGS=""
+DEBAND=0
+DEBAND_RANGE=""
+DEBAND_THRESHOLD=""
 OVERWRITE=0
 
 while [[ $# -gt 0 ]]; do
@@ -62,6 +68,9 @@ while [[ $# -gt 0 ]]; do
     --crop) MANUAL_CROP="$2"; shift 2 ;;
     --rename-audio) RENAME_AUDIO="$2"; shift 2 ;;
     --custom-flags) CUSTOM_FLAGS="$2"; shift 2 ;;
+    --deband) DEBAND="$2"; shift 2 ;;
+    --deband-range) DEBAND_RANGE="$2"; shift 2 ;;
+    --deband-threshold) DEBAND_THRESHOLD="$2"; shift 2 ;;
     --overwrite) OVERWRITE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1"; usage; exit 2 ;;
@@ -264,13 +273,36 @@ PY
 echo "🎬 Input : $INPUT"
 echo "➡️  Output: $OUT_MKV"
 
-VIDEO_FILTER=""
+FILTER_PARTS=()
+
 if [[ -n "$MANUAL_CROP" ]]; then
-  VIDEO_FILTER="crop=$MANUAL_CROP"
-  echo "==> Manual crop: $VIDEO_FILTER"
+  FILTER_PARTS+=("crop=$MANUAL_CROP")
+  echo "==> Manual crop: crop=$MANUAL_CROP"
 elif [[ "$AUTO_CROP" -eq 1 ]]; then
-  VIDEO_FILTER="$(detect_vertical_crop_for_file "$INPUT")"
-  [[ -n "$VIDEO_FILTER" ]] && echo "==> Auto-crop: $VIDEO_FILTER" || echo "==> Auto-crop: none"
+  CROP_FILTER="$(detect_vertical_crop_for_file "$INPUT")"
+  if [[ -n "$CROP_FILTER" ]]; then
+    FILTER_PARTS+=("$CROP_FILTER")
+    echo "==> Auto-crop: $CROP_FILTER"
+  else
+    echo "==> Auto-crop: none"
+  fi
+fi
+
+if [[ "$DEBAND" -eq 1 ]]; then
+  DEBAND_EXPR="deband"
+  DEBAND_OPTS=()
+  [[ -n "$DEBAND_RANGE" ]] && DEBAND_OPTS+=("range=$DEBAND_RANGE")
+  [[ -n "$DEBAND_THRESHOLD" ]] && DEBAND_OPTS+=("1thr=$DEBAND_THRESHOLD:2thr=$DEBAND_THRESHOLD:3thr=$DEBAND_THRESHOLD:4thr=$DEBAND_THRESHOLD")
+  if [[ ${#DEBAND_OPTS[@]} -gt 0 ]]; then
+    DEBAND_EXPR="deband=$(IFS=':'; echo "${DEBAND_OPTS[*]}")"
+  fi
+  FILTER_PARTS+=("$DEBAND_EXPR")
+  echo "==> Deband: $DEBAND_EXPR"
+fi
+
+VIDEO_FILTER=""
+if [[ ${#FILTER_PARTS[@]} -gt 0 ]]; then
+  VIDEO_FILTER="$(IFS=','; echo "${FILTER_PARTS[*]}")"
 fi
 
 VIDEO_FPS="$(detect_source_fps_for_file "$INPUT")"
@@ -366,8 +398,8 @@ SETTINGS_PARTS+=("--crf ${CRF} --preset ${PRESET} --tune ${TUNE} --keyint ${KEYI
 if [[ -n "$CUSTOM_FLAGS" ]]; then
   SETTINGS_PARTS+=("${CUSTOM_FLAGS}")
 fi
-if [[ -n "$VIDEO_FILTER" ]]; then
-  SETTINGS_PARTS+=("crop: ${VIDEO_FILTER#crop=}")
+if [[ ${#FILTER_PARTS[@]} -gt 0 ]]; then
+  SETTINGS_PARTS+=("filters: ${VIDEO_FILTER}")
 fi
 SETTINGS_PARTS+=("color: primaries=${COLOR_PRIMARIES} transfer=${TRANSFER_CHARS} matrix=${MATRIX_COEFFS} range=${COLOR_RANGE}")
 

@@ -701,7 +701,7 @@ class Worker {
     else this.log(`${slotPrefix}Target acquired: ${path.basename(file)} — frame count unknown, limited telemetry`, 'info');
 
     return new Promise((resolve, reject) => {
-      const { input_folder, encoder, crf, preset, tune, custom_flags, subfolder, auto_crop, crop } = batch;
+      const { input_folder, encoder, crf, preset, tune, custom_flags, subfolder, auto_crop, crop, deband } = batch;
       const defaultOutput = path.join(__dirname, '..', '..', 'output');
       const outputRoot = process.env.OUTPUT_DIR || defaultOutput;
 
@@ -732,6 +732,9 @@ class Worker {
         '--tune', tune,
         '--custom-flags', effectiveFlags,
         '--auto-crop', auto_crop ? '1' : '0',
+        '--deband', deband?.enabled ? '1' : '0',
+        ...(deband?.range ? ['--deband-range', String(deband.range)] : []),
+        ...(deband?.threshold ? ['--deband-threshold', String(deband.threshold)] : []),
         '--rename-audio', '0'
       ];
 
@@ -1710,6 +1713,9 @@ app.post('/api/test-encode', async (req, res) => {
             '--tune', String(vTune),
             '--custom-flags', variant.flags || '',
             '--auto-crop', '0',
+            '--deband', variant.deband?.enabled ? '1' : '0',
+            ...(variant.deband?.range ? ['--deband-range', String(variant.deband.range)] : []),
+            ...(variant.deband?.threshold ? ['--deband-threshold', String(variant.deband.threshold)] : []),
             '--rename-audio', '0',
             '--overwrite', '1'
           ];

@@ -937,6 +937,7 @@ const QueueSection = ({ queue }) => {
                   <span className={tagCls}>T{batch.tune || 0}</span>
                   {batch.subfolder && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-wire-cyan/30 text-wire-cyan">{batch.subfolder}</span>}
                   {batch.auto_crop && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-data-green/30 text-data-green">Crop</span>}
+                  {batch.deband?.enabled && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-data-green/30 text-data-green">Deband</span>}
                 </div>
               </div>
               {batch.id && <button onClick={() => removeJob(batch.id)} title="Remove from queue" className="p-1.5 text-steel-dim hover:text-alert-red transition-all"><X className="w-3.5 h-3.5" /></button>}
@@ -948,7 +949,7 @@ const QueueSection = ({ queue }) => {
                 <div><span className="text-[11px] font-bold text-steel-dim uppercase block">CRF / Preset / Tune</span><span className="text-[12px] font-bold text-steel">{batch.crf} / {batch.preset} / {batch.tune || 0}</span></div>
                 <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Output Subfolder</span><span className="text-[12px] font-bold text-steel">{batch.subfolder || '—'}</span></div>
                 <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Custom Flags</span><span className="text-[12px] font-bold text-steel font-sys">{batch.custom_flags || '—'}</span></div>
-                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Options</span><span className="text-[12px] font-bold text-steel">{batch.auto_crop ? 'Auto-Crop' : '—'}</span></div>
+                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Options</span><span className="text-[12px] font-bold text-steel">{[batch.auto_crop && 'Auto-Crop', batch.deband?.enabled && 'Deband'].filter(Boolean).join(', ') || '—'}</span></div>
                 {batch.addedAt && <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Added</span><span className="text-[12px] font-bold text-steel">{new Date(batch.addedAt).toLocaleString()}</span></div>}
               </div>
             )}
@@ -1156,7 +1157,7 @@ const FileBrowser = ({ currentPath, onNavigate, onSelect, onFileSelect, selected
 };
 
 const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite }) => {
-  const [formData, setFormData] = useState({ encoder: encoders[0]?.path || '', crf: '18', preset: '4', tune: '0', custom_flags: '', subfolder: '', auto_crop: false });
+  const [formData, setFormData] = useState({ encoder: encoders[0]?.path || '', crf: '18', preset: '4', tune: '0', custom_flags: '', subfolder: '', auto_crop: false, deband: { enabled: false, range: '', threshold: '' } });
   const [path, setPath] = useState('/');
   const [selectedFile, setSelectedFile] = useState(null);
   const [items, setItems] = useState([]);
@@ -1197,6 +1198,19 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
             <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Extra Encoder Flags</label><input type="text" value={formData.custom_flags} onChange={e=>setFormData({...formData, custom_flags:e.target.value})} placeholder="e.g. --lineart-psy-bias 3" className={inputCls} /></div>
             <div className="space-y-2">
               <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.auto_crop} onChange={e=>setFormData({...formData, auto_crop:e.target.checked})} className="w-4 h-4 accent-nerv" /><span className="text-xs font-bold text-steel">Auto-Crop Black Bars</span></label>
+              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.deband.enabled} onChange={e=>setFormData({...formData, deband:{...formData.deband, enabled:e.target.checked}})} className="w-4 h-4 accent-nerv" /><span className="text-xs font-bold text-steel">Deband</span></label>
+              {formData.deband.enabled && (
+                <div className="flex gap-4 ml-7">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-steel-dim uppercase">Range</label>
+                    <input type="number" value={formData.deband.range} onChange={e=>setFormData({...formData, deband:{...formData.deband, range:e.target.value}})} placeholder="16" className={inputCls} style={{width:'80px'}} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-steel-dim uppercase">Threshold</label>
+                    <input type="number" step="0.01" value={formData.deband.threshold} onChange={e=>setFormData({...formData, deband:{...formData.deband, threshold:e.target.value}})} placeholder="0.02" className={inputCls} style={{width:'80px'}} />
+                  </div>
+                </div>
+              )}
             </div>
             <button type="submit" disabled={inputTarget==='/'} className="w-full py-4 font-bold text-sm transition-all active:scale-[0.98] uppercase tracking-wider text-black disabled:opacity-30 bg-nerv hover:bg-nerv-hot">{selectedFile ? 'Encode Single File' : 'Add Batch to Queue'}</button>
           </form>
@@ -2814,7 +2828,7 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
   const [selectedFile, setSelectedFile] = useState('');
   const defaultEncoder = encoders[0]?.path || '';
   const [formData, setFormData] = useState({ duration: '60', startTime: '', screenshotCount: '6' });
-  const makeVariant = (label) => ({ label, encoder: defaultEncoder, crf: '18', preset: '4', tune: '0', flags: '' });
+  const makeVariant = (label) => ({ label, encoder: defaultEncoder, crf: '18', preset: '4', tune: '0', flags: '', deband: { enabled: false, range: '', threshold: '' } });
   const [variants, setVariants] = useState([makeVariant('variant-a'), makeVariant('variant-b')]);
   const [browsePath, setBrowsePath] = useState('/');
   const [browseItems, setBrowseItems] = useState([]);
@@ -2847,7 +2861,7 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
         duration: formData.duration,
         startTime: formData.startTime || undefined,
         screenshotCount: formData.screenshotCount,
-        variants: variants.map(v => ({ label: v.label.trim(), encoder: v.encoder, crf: v.crf, preset: v.preset, tune: v.tune, flags: v.flags })),
+        variants: variants.map(v => ({ label: v.label.trim(), encoder: v.encoder, crf: v.crf, preset: v.preset, tune: v.tune, flags: v.flags, deband: v.deband })),
       });
       onClose();
     } catch (e) { alert(e.response?.data?.error || e.message); }
@@ -2921,9 +2935,27 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
                       <input type="number" value={v.tune} onChange={e => updateVariant(i, 'tune', e.target.value)} className={compactInput} />
                     </div>
                   </div>
-                  <div className="px-3 pb-3">
+                  <div className="px-3 pb-2">
                     <span className="text-[10px] font-bold text-steel-dim uppercase block mb-1">Custom Flags</span>
                     <input type="text" value={v.flags} onChange={e => updateVariant(i, 'flags', e.target.value)} placeholder="e.g. --film-grain 4" className={compactInput} />
+                  </div>
+                  <div className="px-3 pb-3 flex items-center gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={v.deband.enabled} onChange={e => updateVariant(i, 'deband', {...v.deband, enabled: e.target.checked})} className="w-3.5 h-3.5 accent-wire-cyan" />
+                      <span className="text-[10px] font-bold text-steel uppercase">Deband</span>
+                    </label>
+                    {v.deband.enabled && (
+                      <>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-steel-dim uppercase">Range</span>
+                          <input type="number" value={v.deband.range} onChange={e => updateVariant(i, 'deband', {...v.deband, range: e.target.value})} placeholder="16" className={compactInput} style={{width:'60px'}} />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-steel-dim uppercase">Thr</span>
+                          <input type="number" step="0.01" value={v.deband.threshold} onChange={e => updateVariant(i, 'deband', {...v.deband, threshold: e.target.value})} placeholder="0.02" className={compactInput} style={{width:'60px'}} />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
