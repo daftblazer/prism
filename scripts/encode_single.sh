@@ -128,7 +128,7 @@ audio_plan_for_file() {
 import json, subprocess, sys
 input_path = sys.argv[1]
 try:
-    probe = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-select_streams", "a", input_path], capture_output=True, text=True, check=True)
+    probe = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-select_streams", "a", input_path], capture_output=True, encoding='utf-8', errors='replace', check=True)
     data = json.loads(probe.stdout or "{}")
 except Exception as e:
     print(f"Error probing audio: {e}", file=sys.stderr)
@@ -184,7 +184,7 @@ detect_vertical_crop_for_file() {
 import collections, json, re, subprocess, sys
 input_path = sys.argv[1]
 try:
-    probe = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-select_streams", "v:0", input_path], capture_output=True, text=True, check=True)
+    probe = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-select_streams", "v:0", input_path], capture_output=True, encoding='utf-8', errors='replace', check=True)
     probe_data = json.loads(probe.stdout or "{}")
 except:
     sys.exit(0)
@@ -196,7 +196,7 @@ if in_h <= 0: sys.exit(0)
 # Scan a few points to be more robust
 crop_counts = collections.Counter()
 for ss in ["60", "300", "600"]:
-    scan = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-ss", ss, "-i", input_path, "-map", "0:v:0", "-vf", "cropdetect=limit=0.08:round=2:reset=0", "-frames:v", "60", "-f", "null", "-"], capture_output=True, text=True)
+    scan = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "info", "-ss", ss, "-i", input_path, "-map", "0:v:0", "-vf", "cropdetect=limit=0.08:round=2:reset=0", "-frames:v", "60", "-f", "null", "-"], capture_output=True, encoding='utf-8', errors='replace')
     matches = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", (scan.stderr or ""))
     if matches:
         crop_counts.update(matches)
@@ -219,7 +219,7 @@ try:
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-print_format", "json",
          "-show_streams", "-select_streams", "v:0", input_path],
-        capture_output=True, text=True, check=True)
+        capture_output=True, encoding='utf-8', errors='replace', check=True)
     streams = json.loads(probe.stdout or "{}").get("streams") or [{}]
 except:
     streams = [{}]
@@ -255,7 +255,7 @@ detect_source_fps_for_file() {
 import json, subprocess, sys
 input_path = sys.argv[1]
 try:
-    probe = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-select_streams", "v:0", input_path], capture_output=True, text=True, check=True)
+    probe = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-select_streams", "v:0", input_path], capture_output=True, encoding='utf-8', errors='replace', check=True)
     streams = json.loads(probe.stdout or "{}").get("streams") or [{}]
 except:
     sys.exit(0)

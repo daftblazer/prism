@@ -39,7 +39,7 @@ from collections import defaultdict
 
 result = subprocess.run(
     ['ffprobe', '-v', 'error', '-show_format', '-show_streams', '-of', 'flat', sys.argv[1]],
-    capture_output=True, text=True
+    capture_output=True, encoding='utf-8', errors='replace'
 )
 lines = result.stdout.strip().split('\n')
 fmt = {}
