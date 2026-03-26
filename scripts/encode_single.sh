@@ -389,10 +389,10 @@ for plan in "${AUDIO_PLAN_ARR[@]}"; do
 done
 
 # 4) Build encoding settings tag
-ENCODER_VERSION="$("$ENCODER" 2>&1 | sed -n 's/.*SVT \[version\][[:space:]]*:[[:space:]]*//p' || echo "unknown")"
+ENCODER_VERSION="$("$ENCODER" 2>&1 | sed -n 's/.*SVT \[version\][[:space:]]*:[[:space:]]*//p' || true)"
+ENCODER_VERSION="$(echo "$ENCODER_VERSION" | head -1)"
 [[ -z "$ENCODER_VERSION" ]] && ENCODER_VERSION="unknown"
 SETTINGS_PARTS=()
-SETTINGS_PARTS+=("PRISM")
 SETTINGS_PARTS+=("${ENCODER_VERSION}")
 SETTINGS_PARTS+=("--crf ${CRF} --preset ${PRESET} --tune ${TUNE} --keyint ${KEYINT}")
 if [[ -n "$CUSTOM_FLAGS" ]]; then
