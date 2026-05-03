@@ -7,3 +7,5 @@ BUILDING.md
 config/
 output/
 build-tools/
+.smbcredentials
+webui/server/logs/
