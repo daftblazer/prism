@@ -341,6 +341,30 @@
     ]
   },
   {
+    "id": "mux_tracks",
+    "name": "Mux Tracks",
+    "description": "Compose new MKVs by combining tracks from two source directories. Pairs files by S##E## token, walks subdirectories recursively, mirrors folder structure under the output dir.",
+    "category": "muxing",
+    "mode": "output",
+    "script": "mux-tracks.sh",
+    "envVars": [
+      { "name": "VIDEO_DIR", "label": "Video Source Directory", "type": "path", "default": "" },
+      { "name": "TRACKS_DIR", "label": "Tracks Source Directory", "type": "path", "default": "" },
+      { "name": "OUT_DIR", "label": "Output Directory", "type": "path", "default": "" },
+      { "name": "RECURSIVE", "label": "Recursive", "type": "boolean", "default": "1" },
+      { "name": "VIDEO_SRC_VIDEO_IDS", "label": "Video Track IDs from Video Source", "type": "string", "default": "" },
+      { "name": "VIDEO_SRC_AUDIO_IDS", "label": "Audio Track IDs from Video Source", "type": "string", "default": "" },
+      { "name": "VIDEO_SRC_SUB_IDS", "label": "Subtitle Track IDs from Video Source", "type": "string", "default": "" },
+      { "name": "TRACKS_SRC_VIDEO_IDS", "label": "Video Track IDs from Tracks Source", "type": "string", "default": "" },
+      { "name": "TRACKS_SRC_AUDIO_IDS", "label": "Audio Track IDs from Tracks Source", "type": "string", "default": "" },
+      { "name": "TRACKS_SRC_SUB_IDS", "label": "Subtitle Track IDs from Tracks Source", "type": "string", "default": "" },
+      { "name": "CHAPTERS_FROM", "label": "Chapters From (video|tracks|none)", "type": "string", "default": "tracks" },
+      { "name": "ATTACHMENTS_FROM", "label": "Attachments From (video|tracks|none)", "type": "string", "default": "tracks" },
+      { "name": "MIRROR_FROM", "label": "Mirror Structure From (video|tracks)", "type": "string", "default": "video" },
+      { "name": "DRY_RUN", "label": "Dry Run", "type": "boolean", "default": "0" }
+    ]
+  },
+  {
     "id": "qc_check",
     "name": "QC Check",
     "description": "Pre-release quality control — shows container title, video/audio/subtitle tracks, defaults, chapters, attachments, and flags issues.",
