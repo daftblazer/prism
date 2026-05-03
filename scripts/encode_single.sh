@@ -22,6 +22,10 @@ Options:
   --deband 0|1         Enable/disable deband filter (default: 0)
   --deband-range N     Deband sample range (default: FFmpeg default 16)
   --deband-threshold N Deband threshold for all planes (default: FFmpeg default 0.02)
+  --downscale H        Target height (e.g. 1080, 720). Preserves aspect, scales only if source is taller.
+  --hdr-to-sdr 0|1     Tone-map HDR (PQ/HLG) sources to SDR BT.709 (default: 0)
+  --tonemap ALGO       Tone-mapping algorithm: hable|mobius|reinhard (default: hable)
+  --encode-lossless 0|1 Re-encode lossless audio (FLAC/TrueHD/etc) to Opus (default: 1)
   --overwrite 0|1      Overwrite existing output (default: 0)
   -h, --help           Show help
 EOF
@@ -53,6 +57,10 @@ CUSTOM_FLAGS=""
 DEBAND=0
 DEBAND_RANGE=""
 DEBAND_THRESHOLD=""
+DOWNSCALE=""
+HDR_TO_SDR=0
+TONEMAP="hable"
+ENCODE_LOSSLESS=1
 OVERWRITE=0
 
 while [[ $# -gt 0 ]]; do
@@ -71,6 +79,10 @@ while [[ $# -gt 0 ]]; do
     --deband) DEBAND="$2"; shift 2 ;;
     --deband-range) DEBAND_RANGE="$2"; shift 2 ;;
     --deband-threshold) DEBAND_THRESHOLD="$2"; shift 2 ;;
+    --downscale) DOWNSCALE="$2"; shift 2 ;;
+    --hdr-to-sdr) HDR_TO_SDR="$2"; shift 2 ;;
+    --tonemap) TONEMAP="$2"; shift 2 ;;
+    --encode-lossless) ENCODE_LOSSLESS="$2"; shift 2 ;;
     --overwrite) OVERWRITE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1"; usage; exit 2 ;;
@@ -124,9 +136,11 @@ trap cleanup EXIT
 
 audio_plan_for_file() {
   local input="$1"
-  python3 - "$input" <<'PY'
+  local encode_lossless="$2"
+  python3 - "$input" "$encode_lossless" <<'PY'
 import json, subprocess, sys
 input_path = sys.argv[1]
+encode_lossless = sys.argv[2] == "1"
 try:
     probe = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-select_streams", "a", input_path], capture_output=True, encoding='utf-8', errors='replace', check=True)
     data = json.loads(probe.stdout or "{}")
@@ -164,7 +178,8 @@ lines, summary = [], []
 for out_idx, s in enumerate(streams):
   codec = (s.get("codec_name") or "").lower()
   ch = int(s.get("channels") or 2)
-  should_encode = (codec in LOSSLESS) or (codec == "dts" and is_dts_hd_ma(s))
+  is_lossless = (codec in LOSSLESS) or (codec == "dts" and is_dts_hd_ma(s))
+  should_encode = is_lossless and encode_lossless
   mode, bitrate = ("encode", bitrate_for(ch)) if should_encode else ("copy", "-")
   out_codec = codec_label(codec, should_encode)
   summary.append(f"a:{out_idx} {codec} {ch}ch -> {mode} ({out_codec})")
@@ -288,6 +303,19 @@ elif [[ "$AUTO_CROP" -eq 1 ]]; then
   fi
 fi
 
+if [[ -n "$DOWNSCALE" ]]; then
+  # Only scale if source is taller than target; preserve aspect, even dims.
+  SCALE_EXPR="scale=-2:'min(${DOWNSCALE},ih)':flags=lanczos"
+  FILTER_PARTS+=("$SCALE_EXPR")
+  echo "==> Downscale: target height ${DOWNSCALE}p"
+fi
+
+if [[ "$HDR_TO_SDR" -eq 1 ]]; then
+  TONEMAP_EXPR="zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=${TONEMAP}:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p10le"
+  FILTER_PARTS+=("$TONEMAP_EXPR")
+  echo "==> HDR→SDR: tonemap=${TONEMAP}"
+fi
+
 if [[ "$DEBAND" -eq 1 ]]; then
   DEBAND_EXPR="deband"
   DEBAND_OPTS=()
@@ -318,6 +346,14 @@ while IFS='=' read -r key value; do
   export "$key=$value"
 done < <(detect_color_metadata_for_file "$INPUT")
 echo "==> Color: primaries=$COLOR_PRIMARIES transfer=$TRANSFER_CHARS matrix=$MATRIX_COEFFS range=$COLOR_RANGE"
+
+if [[ "$HDR_TO_SDR" -eq 1 ]]; then
+  COLOR_PRIMARIES=1
+  TRANSFER_CHARS=1
+  MATRIX_COEFFS=1
+  COLOR_RANGE=0
+  echo "==> Color overridden for SDR output: bt709 / bt709 / bt709 / tv"
+fi
 
 # 1) Encode video
 echo "==> Encoding video (CRF=$CRF, preset=$PRESET, tune=$TUNE) ..."
@@ -353,7 +389,7 @@ if [[ ! -s "$TMP_AV1" ]]; then
 fi
 
 # 2) Plan audio
-mapfile -t AUDIO_PLAN_ARR < <(audio_plan_for_file "$INPUT" 2> >(tee "$TMP_AUDIO_SUMMARY" >&2))
+mapfile -t AUDIO_PLAN_ARR < <(audio_plan_for_file "$INPUT" "$ENCODE_LOSSLESS" 2> >(tee "$TMP_AUDIO_SUMMARY" >&2))
 
 if [[ ${#AUDIO_PLAN_ARR[@]} -eq 0 ]]; then
   echo "⚠️  No audio tracks detected or audio planning failed."
