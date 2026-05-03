@@ -938,6 +938,9 @@ const QueueSection = ({ queue }) => {
                   {batch.subfolder && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-wire-cyan/30 text-wire-cyan">{batch.subfolder}</span>}
                   {batch.auto_crop && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-data-green/30 text-data-green">Crop</span>}
                   {batch.deband?.enabled && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-data-green/30 text-data-green">Deband</span>}
+                  {batch.downscale && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-wire-cyan/30 text-wire-cyan">{batch.downscale}p</span>}
+                  {batch.hdr_to_sdr && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-nerv-hot/30 text-nerv-hot">HDR→SDR</span>}
+                  {batch.encode_lossless === false && <span className="text-[11px] font-bold uppercase px-1.5 py-0.5 border border-steel-dim/30 text-steel-dim">Audio Passthrough</span>}
                 </div>
               </div>
               {batch.id && <button onClick={() => removeJob(batch.id)} title="Remove from queue" className="p-1.5 text-steel-dim hover:text-alert-red transition-all"><X className="w-3.5 h-3.5" /></button>}
@@ -949,7 +952,7 @@ const QueueSection = ({ queue }) => {
                 <div><span className="text-[11px] font-bold text-steel-dim uppercase block">CRF / Preset / Tune</span><span className="text-[12px] font-bold text-steel">{batch.crf} / {batch.preset} / {batch.tune || 0}</span></div>
                 <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Output Subfolder</span><span className="text-[12px] font-bold text-steel">{batch.subfolder || '—'}</span></div>
                 <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Custom Flags</span><span className="text-[12px] font-bold text-steel font-sys">{batch.custom_flags || '—'}</span></div>
-                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Options</span><span className="text-[12px] font-bold text-steel">{[batch.auto_crop && 'Auto-Crop', batch.deband?.enabled && 'Deband'].filter(Boolean).join(', ') || '—'}</span></div>
+                <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Options</span><span className="text-[12px] font-bold text-steel">{[batch.auto_crop && 'Auto-Crop', batch.deband?.enabled && 'Deband', batch.downscale && `Downscale ${batch.downscale}p`, batch.hdr_to_sdr && `HDR→SDR (${batch.tonemap || 'hable'})`, batch.encode_lossless === false && 'Lossless passthrough'].filter(Boolean).join(', ') || '—'}</span></div>
                 {batch.addedAt && <div><span className="text-[11px] font-bold text-steel-dim uppercase block">Added</span><span className="text-[12px] font-bold text-steel">{new Date(batch.addedAt).toLocaleString()}</span></div>}
               </div>
             )}
@@ -1156,8 +1159,35 @@ const FileBrowser = ({ currentPath, onNavigate, onSelect, onFileSelect, selected
   );
 };
 
+const DOWNSCALE_OPTIONS = [
+  { value: '', label: 'Source (no scale)' },
+  { value: '2160', label: '2160p (4K UHD)' },
+  { value: '1440', label: '1440p (QHD)' },
+  { value: '1080', label: '1080p (Full HD)' },
+  { value: '720', label: '720p (HD)' },
+  { value: '480', label: '480p (SD)' },
+];
+
+const TONEMAP_OPTIONS = [
+  { value: 'hable', label: 'Hable (balanced)' },
+  { value: 'mobius', label: 'Mobius (preserves highlights)' },
+  { value: 'reinhard', label: 'Reinhard (simple)' },
+];
+
 const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite }) => {
-  const [formData, setFormData] = useState({ encoder: encoders[0]?.path || '', crf: '18', preset: '4', tune: '0', custom_flags: '', subfolder: '', auto_crop: false, deband: { enabled: false, range: '', threshold: '' } });
+  const [formData, setFormData] = useState({
+    encoder: encoders[0]?.path || '',
+    crf: '18', preset: '4', tune: '0',
+    custom_flags: '',
+    subfolder: '',
+    auto_crop: false,
+    deband: { enabled: false, range: '', threshold: '' },
+    downscale: '',
+    hdr_to_sdr: false,
+    tonemap: 'hable',
+    encode_lossless: true,
+  });
+  const [activeTab, setActiveTab] = useState('video');
   const [path, setPath] = useState('/');
   const [selectedFile, setSelectedFile] = useState(null);
   const [items, setItems] = useState([]);
@@ -1172,7 +1202,17 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
     try { await axios.post('/api/queue', { ...formData, input_folder: inputTarget }); onSuccess(); } catch (e) { alert(e.message); }
   };
 
+  const upd = (patch) => setFormData(prev => ({ ...prev, ...patch }));
   const inputCls = "w-full border border-sf bg-void p-3 text-xs font-bold text-steel font-sys";
+  const labelCls = "text-[14px] font-bold uppercase tracking-widest text-nerv";
+  const subLabelCls = "text-[11px] font-bold text-steel-dim uppercase";
+
+  const TABS = [
+    { id: 'video', label: 'Video' },
+    { id: 'audio', label: 'Audio' },
+    { id: 'filters', label: 'Filters' },
+    { id: 'output', label: 'Output' },
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90">
@@ -1185,34 +1225,111 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
           <div className="w-1/2 border-r border-sf flex flex-col bg-void">
             <FileBrowser currentPath={path} onNavigate={(p) => { setPath(p); setSelectedFile(null); }} onFileSelect={handleFileSelect} selectedFile={selectedFile} items={items} loading={loading} favorites={favorites} onToggleFavorite={toggleFavorite} />
           </div>
-          <form onSubmit={handleSubmit} className="w-1/2 p-8 space-y-6 bg-void-panel">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Encoder Choice</label><select value={formData.encoder} onChange={e=>setFormData({...formData, encoder:e.target.value})} className={inputCls}>{encoders.map(e=><option key={e.path} value={e.path}>{e.name}</option>)}</select></div>
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">CRF Level</label><input type="number" value={formData.crf} onChange={e=>setFormData({...formData, crf:e.target.value})} className={inputCls} /></div>
+          <form onSubmit={handleSubmit} className="w-1/2 flex flex-col bg-void-panel">
+            <div className="flex border-b border-sf bg-void">
+              {TABS.map(t => (
+                <button key={t.id} type="button" onClick={() => setActiveTab(t.id)}
+                  className={cn("px-5 py-3 text-[12px] font-bold uppercase tracking-wider border-r border-sf transition-all",
+                    activeTab === t.id ? "text-nerv border-b-2 border-b-nerv -mb-px bg-void-panel" : "text-steel-dim hover:text-steel")}>
+                  {t.label}
+                </button>
+              ))}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Preset (0-13)</label><input type="number" value={formData.preset} onChange={e=>setFormData({...formData, preset:e.target.value})} className={inputCls} /></div>
-              <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Tune (0-4)</label><input type="number" value={formData.tune} onChange={e=>setFormData({...formData, tune:e.target.value})} className={inputCls} /></div>
-            </div>
-            <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Output Subfolder</label><input type="text" value={formData.subfolder} onChange={e=>setFormData({...formData, subfolder:e.target.value})} placeholder="e.g. encodes" className={inputCls} /></div>
-            <div className="space-y-1.5"><label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Extra Encoder Flags</label><input type="text" value={formData.custom_flags} onChange={e=>setFormData({...formData, custom_flags:e.target.value})} placeholder="e.g. --lineart-psy-bias 3" className={inputCls} /></div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.auto_crop} onChange={e=>setFormData({...formData, auto_crop:e.target.checked})} className="w-4 h-4 accent-nerv" /><span className="text-xs font-bold text-steel">Auto-Crop Black Bars</span></label>
-              <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={formData.deband.enabled} onChange={e=>setFormData({...formData, deband:{...formData.deband, enabled:e.target.checked}})} className="w-4 h-4 accent-nerv" /><span className="text-xs font-bold text-steel">Deband</span></label>
-              {formData.deband.enabled && (
-                <div className="flex gap-4 ml-7">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-steel-dim uppercase">Range</label>
-                    <input type="number" value={formData.deband.range} onChange={e=>setFormData({...formData, deband:{...formData.deband, range:e.target.value}})} placeholder="16" className={inputCls} style={{width:'80px'}} />
+            <div className="flex-1 overflow-auto p-8 space-y-6">
+              {activeTab === 'video' && (
+                <>
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Encoder Choice</label>
+                    <select value={formData.encoder} onChange={e=>upd({encoder:e.target.value})} className={inputCls}>
+                      {encoders.map(e=><option key={e.path} value={e.path}>{e.name}</option>)}
+                    </select>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-steel-dim uppercase">Threshold</label>
-                    <input type="number" step="0.01" value={formData.deband.threshold} onChange={e=>setFormData({...formData, deband:{...formData.deband, threshold:e.target.value}})} placeholder="0.02" className={inputCls} style={{width:'80px'}} />
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1.5"><label className={labelCls}>CRF</label><input type="number" value={formData.crf} onChange={e=>upd({crf:e.target.value})} className={inputCls} /></div>
+                    <div className="space-y-1.5"><label className={labelCls}>Preset (0-13)</label><input type="number" value={formData.preset} onChange={e=>upd({preset:e.target.value})} className={inputCls} /></div>
+                    <div className="space-y-1.5"><label className={labelCls}>Tune (0-4)</label><input type="number" value={formData.tune} onChange={e=>upd({tune:e.target.value})} className={inputCls} /></div>
                   </div>
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Resolution</label>
+                    <select value={formData.downscale} onChange={e=>upd({downscale:e.target.value})} className={inputCls}>
+                      {DOWNSCALE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <p className="text-[11px] text-steel-dim font-sys">Only downscales — sources at or below the target keep native resolution.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={labelCls}>Extra Encoder Flags</label>
+                    <input type="text" value={formData.custom_flags} onChange={e=>upd({custom_flags:e.target.value})} placeholder="e.g. --lineart-psy-bias 3" className={inputCls} />
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'audio' && (
+                <>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" checked={formData.encode_lossless} onChange={e=>upd({encode_lossless:e.target.checked})} className="w-4 h-4 accent-nerv mt-0.5" />
+                    <span>
+                      <span className="block text-xs font-bold text-steel">Re-encode lossless audio to Opus</span>
+                      <span className="block text-[11px] text-steel-dim font-sys mt-0.5">FLAC, TrueHD, DTS-HD MA, PCM, etc. → libopus (VBR, family 1). Lossy formats are always passed through.</span>
+                    </span>
+                  </label>
+                </>
+              )}
+
+              {activeTab === 'filters' && (
+                <>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={formData.auto_crop} onChange={e=>upd({auto_crop:e.target.checked})} className="w-4 h-4 accent-nerv" />
+                    <span className="text-xs font-bold text-steel">Auto-Crop Black Bars</span>
+                  </label>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={formData.hdr_to_sdr} onChange={e=>upd({hdr_to_sdr:e.target.checked})} className="w-4 h-4 accent-nerv" />
+                      <span className="text-xs font-bold text-steel">HDR → SDR Tone Mapping</span>
+                    </label>
+                    {formData.hdr_to_sdr && (
+                      <div className="ml-7 space-y-1">
+                        <label className={subLabelCls}>Algorithm</label>
+                        <select value={formData.tonemap} onChange={e=>upd({tonemap:e.target.value})} className={inputCls} style={{width:'260px'}}>
+                          {TONEMAP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        <p className="text-[11px] text-steel-dim font-sys">Output forced to BT.709 SDR. Skips automatically on SDR sources via passthrough.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={formData.deband.enabled} onChange={e=>upd({deband:{...formData.deband, enabled:e.target.checked}})} className="w-4 h-4 accent-nerv" />
+                      <span className="text-xs font-bold text-steel">Deband</span>
+                    </label>
+                    {formData.deband.enabled && (
+                      <div className="flex gap-4 ml-7">
+                        <div className="space-y-1">
+                          <label className={subLabelCls}>Range</label>
+                          <input type="number" value={formData.deband.range} onChange={e=>upd({deband:{...formData.deband, range:e.target.value}})} placeholder="16" className={inputCls} style={{width:'80px'}} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className={subLabelCls}>Threshold</label>
+                          <input type="number" step="0.01" value={formData.deband.threshold} onChange={e=>upd({deband:{...formData.deband, threshold:e.target.value}})} placeholder="0.02" className={inputCls} style={{width:'80px'}} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'output' && (
+                <div className="space-y-1.5">
+                  <label className={labelCls}>Output Subfolder</label>
+                  <input type="text" value={formData.subfolder} onChange={e=>upd({subfolder:e.target.value})} placeholder="e.g. encodes" className={inputCls} />
+                  <p className="text-[11px] text-steel-dim font-sys">Appended under OUTPUT_DIR. Source folder structure is preserved beneath this.</p>
                 </div>
               )}
             </div>
-            <button type="submit" disabled={inputTarget==='/'} className="w-full py-4 font-bold text-sm transition-all active:scale-[0.98] uppercase tracking-wider text-black disabled:opacity-30 bg-nerv hover:bg-nerv-hot">{selectedFile ? 'Encode Single File' : 'Add Batch to Queue'}</button>
+            <div className="border-t border-sf p-4 bg-void">
+              <button type="submit" disabled={inputTarget==='/'} className="w-full py-4 font-bold text-sm transition-all active:scale-[0.98] uppercase tracking-wider text-black disabled:opacity-30 bg-nerv hover:bg-nerv-hot">{selectedFile ? 'Encode Single File' : 'Add Batch to Queue'}</button>
+            </div>
           </form>
         </div>
       </div>
@@ -1220,7 +1337,22 @@ const AddBatchModal = ({ onClose, encoders, onSuccess, favorites, toggleFavorite
   );
 };
 
-const AUDIO_TAB_TOOL_IDS = ['swap_audio_order', 'shift_audio_offset', 'set_default_audio', 'strip_compat_audio', 'keep_japanese_audio', 'mux_in_english', 'mux_commentary', 'rename_tracks', 'mux_audio_tracks'];
+const AUDIO_TAB_TOOL_IDS = ['swap_audio_order', 'shift_audio_offset', 'set_default_audio', 'strip_compat_audio', 'keep_japanese_audio', 'mux_in_english', 'mux_commentary', 'rename_tracks', 'mux_audio_tracks', 'mux_tracks'];
+
+const LANG_OPTIONS = [
+  { code: 'und', label: 'Undefined' },
+  { code: 'eng', label: 'English' },
+  { code: 'jpn', label: 'Japanese' },
+  { code: 'ger', label: 'German' },
+  { code: 'fre', label: 'French' },
+  { code: 'spa', label: 'Spanish' },
+  { code: 'ita', label: 'Italian' },
+  { code: 'por', label: 'Portuguese' },
+  { code: 'rus', label: 'Russian' },
+  { code: 'kor', label: 'Korean' },
+  { code: 'zho', label: 'Chinese' },
+  { code: 'ara', label: 'Arabic' },
+];
 
 const AUDIO_TOOL_STRIP_IDS = ['set_default_audio', 'swap_audio_order', 'shift_audio_offset', 'mux_audio_tracks'];
 
@@ -1236,6 +1368,7 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
   const [results, setResults] = useState(null);
   const [expandedFile, setExpandedFile] = useState(null);
   const [editedNames, setEditedNames] = useState({});
+  const [editedLanguages, setEditedLanguages] = useState({});
   const [saving, setSaving] = useState({});
   const [checkedTracks, setCheckedTracks] = useState({});
   const [removing, setRemoving] = useState({});
@@ -1291,6 +1424,7 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
     setResults(null);
     setExpandedFile(null);
     setEditedNames({});
+    setEditedLanguages({});
     setCheckedTracks({});
     try {
       const res = await axios.get(`/api/audio-scanner/scan?dir=${encodeURIComponent(selectedDir)}`);
@@ -1309,8 +1443,10 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
     const file = results?.files?.find(f => f.path === filePath);
     if (file) {
       const names = {};
-      file.audioTracks.forEach(t => { names[t.index] = t.name; });
+      const langs = {};
+      file.audioTracks.forEach(t => { names[t.index] = t.name; langs[t.index] = t.language; });
       setEditedNames(prev => ({ ...prev, [filePath]: names }));
+      setEditedLanguages(prev => ({ ...prev, [filePath]: langs }));
     }
   };
 
@@ -1318,16 +1454,37 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
     setEditedNames(prev => ({ ...prev, [filePath]: { ...(prev[filePath] || {}), [trackIndex]: value } }));
   };
 
+  const handleLanguageChange = (filePath, trackIndex, value) => {
+    setEditedLanguages(prev => ({ ...prev, [filePath]: { ...(prev[filePath] || {}), [trackIndex]: value } }));
+  };
+
+  const buildTrackPayload = (file, names, langs) => {
+    const tracks = [];
+    for (const t of file.audioTracks) {
+      const nameChanged = names && names[t.index] !== undefined && names[t.index] !== t.name;
+      const langChanged = langs && langs[t.index] !== undefined && langs[t.index] !== t.language;
+      if (!nameChanged && !langChanged) continue;
+      const entry = { index: t.index };
+      if (nameChanged) entry.name = names[t.index];
+      if (langChanged) entry.language = langs[t.index];
+      tracks.push(entry);
+    }
+    return tracks;
+  };
+
   const handleSave = async (filePath) => {
+    const file = results?.files?.find(f => f.path === filePath);
+    if (!file) return;
     const names = editedNames[filePath];
-    if (!names) return;
-    const tracks = Object.entries(names).map(([index, name]) => ({ index: Number(index), name }));
+    const langs = editedLanguages[filePath];
+    const tracks = buildTrackPayload(file, names, langs);
+    if (tracks.length === 0) return;
     setSaving(prev => ({ ...prev, [filePath]: true }));
     try {
       await axios.post('/api/audio-scanner/rename', { file: filePath, tracks });
       setResults(prev => {
         if (!prev) return prev;
-        const files = prev.files.map(f => f.path === filePath ? { ...f, audioTracks: f.audioTracks.map(t => ({ ...t, name: names[t.index] ?? t.name })) } : f);
+        const files = prev.files.map(f => f.path === filePath ? { ...f, audioTracks: f.audioTracks.map(t => ({ ...t, name: names?.[t.index] ?? t.name, language: langs?.[t.index] ?? t.language })) } : f);
         return { ...prev, files };
       });
     } catch (e) { alert(e.response?.data?.error || e.message); }
@@ -1337,15 +1494,25 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
   const handleSaveAll = async () => {
     if (!results || !expandedFile) return;
     const names = editedNames[expandedFile];
-    if (!names) return;
+    const langs = editedLanguages[expandedFile];
+    if (!names && !langs) return;
     const allFiles = results.files;
-    if (!confirm(`Apply these track names to all ${allFiles.length} files?`)) return;
+    if (!confirm(`Apply these track edits to all ${allFiles.length} files?`)) return;
     setSaving(prev => ({ ...prev, _all: true }));
     try {
       for (const f of allFiles) {
-        const tracks = Object.entries(names)
-          .filter(([idx]) => Number(idx) <= f.audioTracks.length)
-          .map(([index, name]) => ({ index: Number(index), name }));
+        const tracks = [];
+        for (const t of f.audioTracks) {
+          const newName = names?.[t.index];
+          const newLang = langs?.[t.index];
+          const nameChanged = newName !== undefined && newName !== t.name;
+          const langChanged = newLang !== undefined && newLang !== t.language;
+          if (!nameChanged && !langChanged) continue;
+          const entry = { index: t.index };
+          if (nameChanged) entry.name = newName;
+          if (langChanged) entry.language = newLang;
+          tracks.push(entry);
+        }
         if (tracks.length === 0) continue;
         await axios.post('/api/audio-scanner/rename', { file: f.path, tracks });
       }
@@ -1353,7 +1520,7 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
         if (!prev) return prev;
         const files = prev.files.map(f => ({
           ...f,
-          audioTracks: f.audioTracks.map(t => ({ ...t, name: names[t.index] ?? t.name })),
+          audioTracks: f.audioTracks.map(t => ({ ...t, name: names?.[t.index] ?? t.name, language: langs?.[t.index] ?? t.language })),
         }));
         return { ...prev, files };
       });
@@ -1363,9 +1530,13 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
 
   const hasChanges = (filePath) => {
     const file = results?.files?.find(f => f.path === filePath);
+    if (!file) return false;
     const names = editedNames[filePath];
-    if (!file || !names) return false;
-    return file.audioTracks.some(t => names[t.index] !== undefined && names[t.index] !== t.name);
+    const langs = editedLanguages[filePath];
+    return file.audioTracks.some(t =>
+      (names && names[t.index] !== undefined && names[t.index] !== t.name) ||
+      (langs && langs[t.index] !== undefined && langs[t.index] !== t.language)
+    );
   };
 
   const channelLabel = (ch) => ({ 1: 'Mono', 2: '2.0', 6: '5.1', 8: '7.1' }[ch] || `${ch}ch`);
@@ -1389,9 +1560,11 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
     if (!file) return;
     const checks = checkedTracks[filePath] || {};
     const newNames = { ...(editedNames[filePath] || {}) };
+    const langs = editedLanguages[filePath] || {};
     file.audioTracks.forEach(t => {
-      if (checks[t.id] === false) return; // skip unchecked
-      newNames[t.index] = `${langLabel(t.language)} ${channelLabel(t.channels)} (${codecLabel(t.codec)})`;
+      if (checks[t.id] === false) return;
+      const effectiveLang = langs[t.index] ?? t.language;
+      newNames[t.index] = `${langLabel(effectiveLang)} ${channelLabel(t.channels)} (${codecLabel(t.codec)})`;
     });
     setEditedNames(prev => ({ ...prev, [filePath]: newNames }));
   };
@@ -1590,11 +1763,17 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
                       {file.audioTracks.map((track, i) => {
                         const isExtra = i >= results.baseline;
                         const isChecked = checkedTracks[file.path]?.[track.id] ?? true;
+                        const editedLang = editedLanguages[file.path]?.[track.index] ?? track.language;
+                        const langChanged = editedLang !== track.language;
+                        const langKnown = LANG_OPTIONS.some(o => o.code === editedLang);
                         return (
                           <div key={track.index} className={cn("grid grid-cols-[32px_40px_1fr_1fr_100px_60px] gap-0 items-center px-3 py-2 border-b border-sf last:border-b-0", isExtra && "bg-nerv/[0.06]", !isChecked && "opacity-40")}>
                             <input type="checkbox" checked={isChecked} onChange={() => toggleTrackCheck(file.path, track.id)} className="w-4 h-4 accent-nerv" />
                             <span className={cn("text-[14px] font-bold font-sys", isExtra ? "text-nerv" : "text-steel-dim")}>{track.index}</span>
-                            <span className="text-xs font-bold text-steel">{langLabel(track.language)} <span className="text-steel-dim">({track.language})</span></span>
+                            <select value={editedLang} onChange={e => handleLanguageChange(file.path, track.index, e.target.value)} className={cn("border bg-void px-2 py-1.5 text-xs font-bold font-sys w-full mr-2", langChanged ? "border-nerv text-nerv" : (isExtra ? "border-nerv/30 text-steel" : "border-sf text-steel"))}>
+                              {!langKnown && <option value={editedLang}>{editedLang} (current)</option>}
+                              {LANG_OPTIONS.map(o => <option key={o.code} value={o.code}>{o.label} ({o.code})</option>)}
+                            </select>
                             <input type="text" value={editedNames[file.path]?.[track.index] ?? track.name} onChange={e => handleNameChange(file.path, track.index, e.target.value)} placeholder="(no name)" className={cn("border bg-void px-2 py-1.5 text-xs font-bold font-sys text-steel w-full", isExtra ? "border-nerv/30" : "border-sf")} />
                             <span className="text-[14px] font-sys text-steel-dim">{track.codec}</span>
                             <span className="text-[14px] font-sys text-steel-dim">{track.channels}</span>
@@ -1719,6 +1898,319 @@ const AudioScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolSt
         </div>
 
         {/* Tool Output */}
+        {(toolLogs.length > 0 || toolStatus?.running) && (
+          <div className="shrink-0 border border-sf overflow-hidden flex flex-col h-[250px] bg-void-panel">
+            <div className="px-4 py-2 border-b border-sf flex items-center justify-between bg-void shrink-0">
+              <div className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5 text-nerv" /><span className="text-[12px] font-bold uppercase tracking-widest text-nerv">Tool Output</span></div>
+              <div className="flex items-center gap-3">
+                {toolStatus?.running && <button onClick={stopTool} className="flex items-center gap-1.5 text-[14px] font-bold uppercase text-alert-red hover:text-alert-red/80 transition-colors"><StopCircle className="w-3 h-3" /> Stop</button>}
+                {!toolAutoScroll && <button onClick={() => setToolAutoScroll(true)} className="text-[14px] font-bold uppercase text-wire-cyan transition-colors">Resume Scroll</button>}
+                <button onClick={() => setToolLogs([])} className="text-[14px] font-bold uppercase text-steel-dim hover:text-steel transition-colors">Clear</button>
+              </div>
+            </div>
+            <div ref={toolLogRef} onScroll={() => { if (!toolLogRef.current) return; const { scrollTop, scrollHeight, clientHeight } = toolLogRef.current; setToolAutoScroll(scrollHeight - scrollTop - clientHeight < 60); }} className="flex-1 p-4 overflow-auto font-sys text-[17px] leading-relaxed whitespace-pre-wrap text-data-green-dim">
+              {toolLogs.length === 0 && <p className="text-steel-dim/50 italic">Waiting for output...</p>}
+              {toolLogs.map((log, i) => <div key={i} className={cn("mb-0.5", log.includes('[Process exited') ? (log.includes('code 0') ? 'text-data-green' : 'text-alert-red') : '')}>{log}</div>)}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const MUX_PATH_LABELS = { VIDEO_DIR: 'Video Source', TRACKS_DIR: 'Tracks Source', OUT_DIR: 'Output Dir' };
+
+const MuxScanner = ({ favorites, toggleFavorite, toolLogs, setToolLogs, toolStatus, toolLogRef }) => {
+  const [browsePath, setBrowsePath] = useState('/');
+  const [browseItems, setBrowseItems] = useState([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [activePathVar, setActivePathVar] = useState('VIDEO_DIR');
+  const [paths, setPaths] = useState({ VIDEO_DIR: '', TRACKS_DIR: '', OUT_DIR: '' });
+  const [recursive, setRecursive] = useState(true);
+  const [videoTracks, setVideoTracks] = useState([]);
+  const [tracksTracks, setTracksTracks] = useState([]);
+  const [probing, setProbing] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState({});
+  const [selectedTracks, setSelectedTracks] = useState({});
+  const [chaptersFrom, setChaptersFrom] = useState('tracks');
+  const [attachmentsFrom, setAttachmentsFrom] = useState('tracks');
+  const [mirrorFrom, setMirrorFrom] = useState('video');
+  const [dryRun, setDryRun] = useState(false);
+  const [pairs, setPairs] = useState(null);
+  const [toolAutoScroll, setToolAutoScroll] = useState(true);
+
+  useEffect(() => {
+    setBrowseLoading(true);
+    axios.get(`/api/browse?path=${encodeURIComponent(browsePath)}`).then(r => setBrowseItems(r.data)).catch(console.error).finally(() => setBrowseLoading(false));
+  }, [browsePath]);
+
+  useEffect(() => {
+    if (toolAutoScroll && toolLogRef.current) toolLogRef.current.scrollTop = toolLogRef.current.scrollHeight;
+  }, [toolLogs, toolAutoScroll, toolLogRef]);
+
+  useEffect(() => {
+    if (!paths.VIDEO_DIR || !paths.TRACKS_DIR) { setPairs(null); return; }
+    let cancelled = false;
+    axios.get(`/api/mux/pairs?videoDir=${encodeURIComponent(paths.VIDEO_DIR)}&tracksDir=${encodeURIComponent(paths.TRACKS_DIR)}&recursive=${recursive ? 1 : 0}&mirrorFrom=${mirrorFrom}`)
+      .then(r => { if (!cancelled) setPairs(r.data); })
+      .catch(() => { if (!cancelled) setPairs(null); });
+    return () => { cancelled = true; };
+  }, [paths.VIDEO_DIR, paths.TRACKS_DIR, recursive, mirrorFrom]);
+
+  const handleBrowseNav = (p) => {
+    setBrowsePath(p);
+    setPaths(prev => ({ ...prev, [activePathVar]: p }));
+  };
+  const handleBrowseSelect = (p) => {
+    setPaths(prev => ({ ...prev, [activePathVar]: p }));
+  };
+
+  const normalizeTracks = (data) => (data.tracks || []).map(t => ({
+    id: t.id,
+    type: t.type,
+    codec: t.codec || '',
+    lang: t.properties?.language || 'und',
+    name: t.properties?.track_name || '',
+    channels: t.properties?.audio_channels || null,
+    dimensions: t.properties?.pixel_dimensions || null,
+  }));
+
+  const probeBoth = async () => {
+    if (!paths.VIDEO_DIR || !paths.TRACKS_DIR) return alert('Select both source directories first');
+    setProbing(true);
+    try {
+      const [vRes, tRes] = await Promise.all([
+        axios.get(`/api/tools/probe?path=${encodeURIComponent(paths.VIDEO_DIR)}&recursive=${recursive ? 1 : 0}`),
+        axios.get(`/api/tools/probe?path=${encodeURIComponent(paths.TRACKS_DIR)}&recursive=${recursive ? 1 : 0}`),
+      ]);
+      const v = normalizeTracks(vRes.data);
+      const t = normalizeTracks(tRes.data);
+      setVideoTracks(v);
+      setTracksTracks(t);
+      const vSel = {};
+      v.forEach(tr => { if (tr.type === 'video') vSel[tr.id] = true; });
+      setSelectedVideo(vSel);
+      const tSel = {};
+      t.forEach(tr => { if (tr.type === 'audio' || tr.type === 'subtitles') tSel[tr.id] = true; });
+      setSelectedTracks(tSel);
+    } catch (e) {
+      alert(e.response?.data?.error || e.message);
+    } finally {
+      setProbing(false);
+    }
+  };
+
+  const idsByType = (selected, tracks, type) =>
+    tracks.filter(t => t.type === type && selected[t.id]).map(t => t.id).join(',');
+
+  const handleRun = async () => {
+    if (!paths.VIDEO_DIR || !paths.TRACKS_DIR || !paths.OUT_DIR) return alert('Set Video Source, Tracks Source, and Output Dir');
+    if (videoTracks.length === 0 && tracksTracks.length === 0) return alert('Probe both sources first');
+    const env = {
+      VIDEO_DIR: paths.VIDEO_DIR,
+      TRACKS_DIR: paths.TRACKS_DIR,
+      OUT_DIR: paths.OUT_DIR,
+      RECURSIVE: recursive ? '1' : '0',
+      VIDEO_SRC_VIDEO_IDS: idsByType(selectedVideo, videoTracks, 'video'),
+      VIDEO_SRC_AUDIO_IDS: idsByType(selectedVideo, videoTracks, 'audio'),
+      VIDEO_SRC_SUB_IDS: idsByType(selectedVideo, videoTracks, 'subtitles'),
+      TRACKS_SRC_VIDEO_IDS: idsByType(selectedTracks, tracksTracks, 'video'),
+      TRACKS_SRC_AUDIO_IDS: idsByType(selectedTracks, tracksTracks, 'audio'),
+      TRACKS_SRC_SUB_IDS: idsByType(selectedTracks, tracksTracks, 'subtitles'),
+      CHAPTERS_FROM: chaptersFrom,
+      ATTACHMENTS_FROM: attachmentsFrom,
+      MIRROR_FROM: mirrorFrom,
+      DRY_RUN: dryRun ? '1' : '0',
+    };
+    setToolLogs([]);
+    try { await axios.post('/api/tools/mux_tracks/run', { env }); }
+    catch (e) { alert(e.response?.data?.error || e.message); }
+  };
+
+  const stopTool = async () => { try { await axios.post('/api/tools/mux_tracks/stop'); } catch (e) { console.error(e); } };
+
+  const langLabel = (code) => ({ eng: 'English', jpn: 'Japanese', und: 'Undefined', ger: 'German', deu: 'German', fre: 'French', fra: 'French', spa: 'Spanish', ita: 'Italian', por: 'Portuguese', rus: 'Russian', kor: 'Korean', zho: 'Chinese', chi: 'Chinese', ara: 'Arabic' }[code] || code);
+  const channelLabel = (ch) => ({ 1: 'Mono', 2: '2.0', 6: '5.1', 8: '7.1' }[ch] || (ch ? `${ch}ch` : ''));
+  const codecLabel = (codec) => {
+    const c = (codec || '').toLowerCase();
+    if (c.includes('opus')) return 'Opus';
+    if (c.includes('flac')) return 'FLAC';
+    if (c.includes('aac')) return 'AAC';
+    if (c.includes('e-ac-3') || c === 'eac3') return 'EAC3';
+    if (c.includes('ac-3') || c === 'ac3') return 'AC3';
+    if (c.includes('truehd')) return 'TrueHD';
+    if (c.includes('dts-hd')) return 'DTS-HD MA';
+    if (c.includes('dts')) return 'DTS';
+    if (c.includes('vorbis')) return 'Vorbis';
+    if (c.includes('mp3') || c.includes('mpeg')) return 'MP3';
+    if (c.includes('pcm')) return 'PCM';
+    if (c.includes('av1')) return 'AV1';
+    if (c.includes('hevc') || c.includes('h.265') || c.includes('h265')) return 'HEVC';
+    if (c.includes('h.264') || c.includes('h264') || c.includes('avc')) return 'AVC';
+    if (c.includes('pgs')) return 'PGS';
+    if (c.includes('subrip') || c === 'srt') return 'SRT';
+    if (c.includes('ass') || c.includes('ssa')) return 'ASS';
+    return codec;
+  };
+
+  const trackTypeBadge = (type) => {
+    const map = {
+      video: { label: 'V', color: 'text-wire-cyan border-wire-cyan/40' },
+      audio: { label: 'A', color: 'text-nerv border-nerv/40' },
+      subtitles: { label: 'S', color: 'text-data-green border-data-green/40' },
+    };
+    const info = map[type] || { label: '?', color: 'text-steel-dim border-sf' };
+    return <span className={cn("inline-block w-5 h-5 text-center text-[12px] font-bold border leading-[18px]", info.color)}>{info.label}</span>;
+  };
+
+  const trackLabel = (t) => {
+    const parts = [];
+    if (t.type === 'video' && t.dimensions) parts.push(t.dimensions);
+    if (t.lang && t.lang !== 'und') parts.push(langLabel(t.lang));
+    if (t.codec) parts.push(codecLabel(t.codec));
+    if (t.type === 'audio' && t.channels) parts.push(channelLabel(t.channels));
+    if (t.name) parts.push(`"${t.name}"`);
+    return parts.join(' · ') || '(unknown)';
+  };
+
+  const renderTrackList = (tracks, selected, setSelected) => (
+    <div className="border border-sf bg-void">
+      {tracks.length === 0 ? (
+        <div className="p-3 text-[14px] text-steel-dim text-center font-bold">No tracks probed</div>
+      ) : tracks.map(t => (
+        <label key={t.id} className="flex items-center gap-3 px-3 py-2 border-b border-sf last:border-b-0 cursor-pointer hover:bg-steel/[0.05]">
+          <input type="checkbox" checked={!!selected[t.id]} onChange={() => setSelected(prev => ({ ...prev, [t.id]: !prev[t.id] }))} className="w-4 h-4 accent-nerv" />
+          {trackTypeBadge(t.type)}
+          <span className="text-[14px] font-bold font-sys text-steel-dim w-8 tabular-nums">#{t.id}</span>
+          <span className="text-xs font-bold text-steel flex-1 truncate">{trackLabel(t)}</span>
+        </label>
+      ))}
+    </div>
+  );
+
+  const inputCls = "w-full border border-sf bg-void p-2.5 text-xs font-bold text-steel font-sys";
+  const allPathsSet = paths.VIDEO_DIR && paths.TRACKS_DIR && paths.OUT_DIR;
+  const hasProbed = videoTracks.length > 0 || tracksTracks.length > 0;
+
+  return (
+    <div className="flex gap-4 h-[calc(100vh-8rem)]">
+      {/* File Browser */}
+      <div className="w-80 shrink-0 border border-sf flex flex-col bg-void overflow-hidden">
+        <div className="px-4 py-3 border-b border-sf bg-void-panel">
+          <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">Select: {MUX_PATH_LABELS[activePathVar]}</h3>
+        </div>
+        <div className="px-3 py-2 border-b border-sf flex gap-1.5 flex-wrap bg-void-panel">
+          {Object.entries(MUX_PATH_LABELS).map(([key, label]) => (
+            <button key={key} onClick={() => { setActivePathVar(key); if (paths[key]) setBrowsePath(paths[key]); }} className={cn("px-2 py-1 text-[14px] font-bold uppercase transition-all", activePathVar === key ? "bg-nerv text-black" : "bg-void border border-sf text-steel-dim hover:text-nerv")}>
+              {label.replace(' Source', '').replace(' Dir', '')}
+            </button>
+          ))}
+        </div>
+        <FileBrowser currentPath={browsePath} onNavigate={handleBrowseNav} onSelect={handleBrowseSelect} items={browseItems} loading={browseLoading} favorites={favorites} onToggleFavorite={toggleFavorite} />
+      </div>
+
+      {/* Right pane */}
+      <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+        <div className="flex-1 border border-sf bg-void-panel overflow-auto p-4 space-y-4">
+          <h3 className="text-[12px] font-bold uppercase tracking-widest text-nerv">Mux Configuration</h3>
+
+          <div className="space-y-2">
+            {Object.entries(MUX_PATH_LABELS).map(([key, label]) => (
+              <div key={key} className="flex items-center gap-3">
+                <span className="text-[14px] font-bold uppercase tracking-widest text-nerv w-32 shrink-0">{label}</span>
+                <div onClick={() => { setActivePathVar(key); if (paths[key]) setBrowsePath(paths[key]); }} className={cn("flex-1 border bg-void px-2.5 py-1.5 text-xs font-bold font-sys truncate cursor-pointer transition-all", activePathVar === key ? "border-nerv/40 text-steel" : "border-sf text-steel-dim hover:border-nerv-dim/30")}>
+                  {paths[key] || '(click to select)'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={() => setRecursive(r => !r)} className={cn("px-3 py-2 text-[15px] font-bold uppercase border transition-all", recursive ? "border-data-green/30 bg-data-green/10 text-data-green" : "border-sf bg-void text-steel-dim")}>
+              {recursive ? 'Recursive On' : 'Recursive Off'}
+            </button>
+            <button onClick={probeBoth} disabled={!paths.VIDEO_DIR || !paths.TRACKS_DIR || probing} className={cn("flex items-center gap-2 px-3 py-2 text-[15px] font-bold uppercase border transition-all", paths.VIDEO_DIR && paths.TRACKS_DIR && !probing ? "border-sf bg-void text-steel hover:text-nerv hover:border-nerv-dim/30" : "border-sf bg-void text-steel-dim cursor-not-allowed")}>
+              <Search className="w-3 h-3" /> {probing ? 'Probing...' : 'Probe Both Sources'}
+            </button>
+          </div>
+
+          {hasProbed && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <h4 className="text-[14px] font-bold uppercase tracking-widest text-wire-cyan">Video Source — pick what to keep</h4>
+                {renderTrackList(videoTracks, selectedVideo, setSelectedVideo)}
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-[14px] font-bold uppercase tracking-widest text-nerv">Tracks Source — pick what to keep</h4>
+                {renderTrackList(tracksTracks, selectedTracks, setSelectedTracks)}
+              </div>
+            </div>
+          )}
+
+          {hasProbed && (
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Chapters From</label>
+                <select value={chaptersFrom} onChange={e => setChaptersFrom(e.target.value)} className={inputCls}>
+                  <option value="video">Video Source</option>
+                  <option value="tracks">Tracks Source</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Attachments From</label>
+                <select value={attachmentsFrom} onChange={e => setAttachmentsFrom(e.target.value)} className={inputCls}>
+                  <option value="video">Video Source</option>
+                  <option value="tracks">Tracks Source</option>
+                  <option value="none">None</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[14px] font-bold uppercase tracking-widest text-nerv">Mirror Structure / Filename</label>
+                <select value={mirrorFrom} onChange={e => setMirrorFrom(e.target.value)} className={inputCls}>
+                  <option value="video">Video Source</option>
+                  <option value="tracks">Tracks Source</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {pairs && (
+            <div className="space-y-2">
+              <h4 className="text-[14px] font-bold uppercase tracking-widest text-nerv flex items-center gap-3 flex-wrap">
+                <span>Pair Preview</span>
+                <span className="text-data-green">{pairs.pairs.length} matched</span>
+                {pairs.unmatchedVideo.length > 0 && <span className="text-alert-red">{pairs.unmatchedVideo.length} video unmatched</span>}
+                {pairs.unmatchedTracks.length > 0 && <span className="text-steel-dim">{pairs.unmatchedTracks.length} tracks unused</span>}
+              </h4>
+              {pairs.pairs.length > 0 && (
+                <div className="border border-sf bg-void max-h-56 overflow-auto">
+                  {pairs.pairs.slice(0, 100).map(p => (
+                    <div key={p.token + p.video} className="flex items-center gap-3 px-3 py-1.5 border-b border-sf last:border-b-0 text-[14px] font-sys">
+                      <span className="font-bold text-nerv w-16 shrink-0">{p.token}</span>
+                      <span className="text-steel-dim flex-1 truncate" title={p.outRel}>→ {p.outRel}</span>
+                    </div>
+                  ))}
+                  {pairs.pairs.length > 100 && <div className="px-3 py-2 text-[13px] text-steel-dim italic">... and {pairs.pairs.length - 100} more</div>}
+                </div>
+              )}
+              {pairs.unmatchedVideo.length > 0 && (
+                <div className="text-[13px] text-alert-red font-sys">Unmatched: {pairs.unmatchedVideo.slice(0, 4).join(', ')}{pairs.unmatchedVideo.length > 4 ? `, +${pairs.unmatchedVideo.length - 4}` : ''}</div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 pt-2 border-t border-sf">
+            <button onClick={() => setDryRun(d => !d)} className={cn("px-3 py-2.5 text-[15px] font-bold uppercase border transition-all", dryRun ? "border-nerv/30 bg-nerv/10 text-nerv" : "border-sf bg-void text-steel-dim")}>
+              {dryRun ? 'Dry Run On' : 'Dry Run Off'}
+            </button>
+            <button onClick={handleRun} disabled={toolStatus?.running || !allPathsSet || !hasProbed} className={cn("flex items-center gap-2 px-6 py-2.5 text-[15px] font-bold uppercase transition-all active:scale-[0.98]", toolStatus?.running || !allPathsSet || !hasProbed ? "bg-steel-dim/30 text-steel-dim cursor-not-allowed" : "bg-nerv text-black hover:bg-nerv-hot")}>
+              <Play className="w-3.5 h-3.5" /> {toolStatus?.running ? 'Running...' : 'Run Mux'}
+            </button>
+          </div>
+        </div>
+
         {(toolLogs.length > 0 || toolStatus?.running) && (
           <div className="shrink-0 border border-sf overflow-hidden flex flex-col h-[250px] bg-void-panel">
             <div className="px-4 py-2 border-b border-sf flex items-center justify-between bg-void shrink-0">
@@ -2828,7 +3320,7 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
   const [selectedFile, setSelectedFile] = useState('');
   const defaultEncoder = encoders[0]?.path || '';
   const [formData, setFormData] = useState({ duration: '60', startTime: '', screenshotCount: '6' });
-  const makeVariant = (label) => ({ label, encoder: defaultEncoder, crf: '18', preset: '4', tune: '0', flags: '', deband: { enabled: false, range: '', threshold: '' } });
+  const makeVariant = (label) => ({ label, encoder: defaultEncoder, crf: '18', preset: '4', tune: '0', flags: '', deband: { enabled: false, range: '', threshold: '' }, downscale: '', hdr_to_sdr: false, tonemap: 'hable', encode_lossless: true });
   const [variants, setVariants] = useState([makeVariant('variant-a'), makeVariant('variant-b')]);
   const [browsePath, setBrowsePath] = useState('/');
   const [browseItems, setBrowseItems] = useState([]);
@@ -2861,7 +3353,7 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
         duration: formData.duration,
         startTime: formData.startTime || undefined,
         screenshotCount: formData.screenshotCount,
-        variants: variants.map(v => ({ label: v.label.trim(), encoder: v.encoder, crf: v.crf, preset: v.preset, tune: v.tune, flags: v.flags, deband: v.deband })),
+        variants: variants.map(v => ({ label: v.label.trim(), encoder: v.encoder, crf: v.crf, preset: v.preset, tune: v.tune, flags: v.flags, deband: v.deband, downscale: v.downscale, hdr_to_sdr: v.hdr_to_sdr, tonemap: v.tonemap, encode_lossless: v.encode_lossless })),
       });
       onClose();
     } catch (e) { alert(e.response?.data?.error || e.message); }
@@ -2939,10 +3431,32 @@ const TestEncodeModal = ({ onClose, encoders, favorites, toggleFavorite }) => {
                     <span className="text-[10px] font-bold text-steel-dim uppercase block mb-1">Custom Flags</span>
                     <input type="text" value={v.flags} onChange={e => updateVariant(i, 'flags', e.target.value)} placeholder="e.g. --film-grain 4" className={compactInput} />
                   </div>
-                  <div className="px-3 pb-3 flex items-center gap-3">
+                  <div className="grid grid-cols-2 gap-2 px-3 pb-2">
+                    <div>
+                      <span className="text-[10px] font-bold text-steel-dim uppercase block mb-1">Resolution</span>
+                      <select value={v.downscale} onChange={e => updateVariant(i, 'downscale', e.target.value)} className={compactInput}>
+                        {DOWNSCALE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-steel-dim uppercase block mb-1">Tonemap</span>
+                      <select value={v.tonemap} onChange={e => updateVariant(i, 'tonemap', e.target.value)} disabled={!v.hdr_to_sdr} className={cn(compactInput, !v.hdr_to_sdr && "opacity-40")}>
+                        {TONEMAP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="px-3 pb-3 flex items-center gap-3 flex-wrap">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={v.deband.enabled} onChange={e => updateVariant(i, 'deband', {...v.deband, enabled: e.target.checked})} className="w-3.5 h-3.5 accent-wire-cyan" />
                       <span className="text-[10px] font-bold text-steel uppercase">Deband</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={v.hdr_to_sdr} onChange={e => updateVariant(i, 'hdr_to_sdr', e.target.checked)} className="w-3.5 h-3.5 accent-wire-cyan" />
+                      <span className="text-[10px] font-bold text-steel uppercase">HDR→SDR</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={v.encode_lossless} onChange={e => updateVariant(i, 'encode_lossless', e.target.checked)} className="w-3.5 h-3.5 accent-wire-cyan" />
+                      <span className="text-[10px] font-bold text-steel uppercase">Opus Lossless</span>
                     </label>
                     {v.deband.enabled && (
                       <>
@@ -3114,6 +3628,7 @@ const App = () => {
           <NavItem icon={<Cpu className="w-3.5 h-3.5" />} label="Encoders" active={activeTab === 'encoders'} onClick={() => setActiveTab('encoders')} />
           <NavItem icon={<Wrench className="w-3.5 h-3.5" />} label="Tools" active={activeTab === 'tools'} onClick={() => setActiveTab('tools')} />
           <NavItem icon={<Music className="w-3.5 h-3.5" />} label="Audio" active={activeTab === 'audio'} onClick={() => setActiveTab('audio')} />
+          <NavItem icon={<Columns className="w-3.5 h-3.5" />} label="Mux" active={activeTab === 'mux'} onClick={() => setActiveTab('mux')} />
           <NavItem icon={<Languages className="w-3.5 h-3.5" />} label="Subtitles" active={activeTab === 'subtitles'} onClick={() => setActiveTab('subtitles')} />
           <NavItem icon={<Clock className="w-3.5 h-3.5" />} label="History" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
           <NavItem icon={<FlaskConical className="w-3.5 h-3.5" />} label="Compare" active={activeTab === 'compare'} onClick={() => setActiveTab('compare')} />
@@ -3146,6 +3661,7 @@ const App = () => {
             {activeTab === 'queue' && <QueueSection queue={queue} />}
             {activeTab === 'tools' && <ToolsSection toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} favorites={appSettings.favorites} toggleFavorite={toggleFavorite} />}
             {activeTab === 'audio' && <AudioScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} />}
+            {activeTab === 'mux' && <MuxScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} />}
             {activeTab === 'subtitles' && <SubtitleScanner favorites={appSettings.favorites} toggleFavorite={toggleFavorite} toolLogs={toolLogs} setToolLogs={setToolLogs} toolStatus={toolStatus} toolLogRef={toolLogRef} appSettings={appSettings} />}
             {activeTab === 'history' && <HistoryPage />}
             {activeTab === 'compare' && <ComparePage testEncodeStatus={testEncodeStatus} setIsTestEncodeOpen={setIsTestEncodeOpen} batchActive={statusActive && !status?.testEncode} />}

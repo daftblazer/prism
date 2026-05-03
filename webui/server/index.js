@@ -701,7 +701,7 @@ class Worker {
     else this.log(`${slotPrefix}Target acquired: ${path.basename(file)} — frame count unknown, limited telemetry`, 'info');
 
     return new Promise((resolve, reject) => {
-      const { input_folder, encoder, crf, preset, tune, custom_flags, subfolder, auto_crop, crop, deband } = batch;
+      const { input_folder, encoder, crf, preset, tune, custom_flags, subfolder, auto_crop, crop, deband, downscale, hdr_to_sdr, tonemap, encode_lossless } = batch;
       const defaultOutput = path.join(__dirname, '..', '..', 'output');
       const outputRoot = process.env.OUTPUT_DIR || defaultOutput;
 
@@ -735,6 +735,10 @@ class Worker {
         '--deband', deband?.enabled ? '1' : '0',
         ...(deband?.range ? ['--deband-range', String(deband.range)] : []),
         ...(deband?.threshold ? ['--deband-threshold', String(deband.threshold)] : []),
+        '--encode-lossless', encode_lossless === false ? '0' : '1',
+        '--hdr-to-sdr', hdr_to_sdr ? '1' : '0',
+        ...(hdr_to_sdr && tonemap ? ['--tonemap', String(tonemap)] : []),
+        ...(downscale ? ['--downscale', String(downscale)] : []),
         '--rename-audio', '0'
       ];
 
@@ -920,7 +924,7 @@ app.get('/api/browse', async (req, res) => {
   try {
     const files = await fs.readdir(fullPath);
     const result = [];
-    const ignoreAtRoot = ['proc', 'sys', 'dev', 'run', 'boot', 'etc', 'var', 'lib', 'lib64', 'bin', 'sbin', 'usr', 'opt', 'root', 'srv', 'tmp'];
+    const ignoreAtRoot = (process.env.BROWSE_HIDE_ROOT ?? 'proc,sys,dev,run,boot,etc,var,lib,lib64,bin,sbin,usr,opt,root,srv,tmp').split(',').map(s => s.trim()).filter(Boolean);
     for (const file of files) {
       if (fullPath === '/' && ignoreAtRoot.includes(file)) continue;
       if (file.startsWith('.')) continue;
@@ -1198,8 +1202,14 @@ app.post('/api/audio-scanner/rename', async (req, res) => {
 
   const args = [file];
   for (const t of tracks) {
-    args.push('--edit', `track:a${t.index}`, '--set', `name=${t.name}`);
+    const setters = [];
+    if (t.name !== undefined) setters.push(`name=${t.name}`);
+    if (t.language) setters.push(`language=${t.language}`);
+    if (setters.length === 0) continue;
+    args.push('--edit', `track:a${t.index}`);
+    for (const s of setters) args.push('--set', s);
   }
+  if (args.length === 1) return res.json({ success: true, noop: true });
 
   try {
     await new Promise((resolve, reject) => {
@@ -1415,14 +1425,47 @@ app.get('/api/tools', async (req, res) => {
   try { const registry = await fs.readJson(TOOL_REGISTRY_FILE); res.json(registry); } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+async function findMkvsRecursively(dir, recursive = true) {
+  const out = [];
+  const walk = async (d) => {
+    let entries;
+    try { entries = await fs.readdir(d, { withFileTypes: true }); }
+    catch { return; }
+    for (const e of entries) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) {
+        if (recursive) await walk(p);
+      } else if (e.isFile() && e.name.toLowerCase().endsWith('.mkv')) {
+        out.push(p);
+      }
+    }
+  };
+  await walk(dir);
+  out.sort();
+  return out;
+}
+
+function extractEpisodeToken(name) {
+  const m = name.match(/[sS](\d{1,2})[eE](\d{1,3})/);
+  if (!m) return null;
+  return `S${m[1].padStart(2, '0')}E${m[2].padStart(2, '0')}`;
+}
+
 app.get('/api/tools/probe', async (req, res) => {
   const dirPath = req.query.path;
+  const recursive = req.query.recursive === '1';
   if (!dirPath) return res.status(400).json({ error: 'path required' });
   try {
-    const files = await fs.readdir(dirPath);
-    const mkv = files.find(f => f.toLowerCase().endsWith('.mkv'));
-    if (!mkv) return res.status(404).json({ error: 'No MKV found in directory' });
-    const filePath = path.join(dirPath, mkv);
+    let filePath;
+    if (recursive) {
+      const all = await findMkvsRecursively(dirPath, true);
+      filePath = all[0];
+    } else {
+      const files = await fs.readdir(dirPath);
+      const mkv = files.find(f => f.toLowerCase().endsWith('.mkv'));
+      if (mkv) filePath = path.join(dirPath, mkv);
+    }
+    if (!filePath) return res.status(404).json({ error: 'No MKV found in directory' });
     const probe = spawn('mkvmerge', ['-J', filePath]);
     let out = '';
     probe.stdout.on('data', (d) => out += d.toString());
@@ -1430,6 +1473,40 @@ app.get('/api/tools/probe', async (req, res) => {
       if (code !== 0) return res.status(500).json({ error: 'mkvmerge probe failed' });
       try { res.json(JSON.parse(out)); } catch { res.status(500).json({ error: 'Failed to parse probe output' }); }
     });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/mux/pairs', async (req, res) => {
+  const { videoDir, tracksDir } = req.query;
+  const recursive = req.query.recursive !== '0';
+  const mirrorFrom = req.query.mirrorFrom === 'tracks' ? 'tracks' : 'video';
+  if (!videoDir || !tracksDir) return res.status(400).json({ error: 'videoDir and tracksDir required' });
+  try {
+    const [videos, tracks] = await Promise.all([
+      findMkvsRecursively(videoDir, recursive),
+      findMkvsRecursively(tracksDir, recursive),
+    ]);
+    const tracksByToken = {};
+    for (const t of tracks) {
+      const tok = extractEpisodeToken(path.basename(t));
+      if (tok && !tracksByToken[tok]) tracksByToken[tok] = t;
+    }
+    const pairs = [];
+    const unmatchedVideo = [];
+    const matchedTrackPaths = new Set();
+    for (const v of videos) {
+      const tok = extractEpisodeToken(path.basename(v));
+      if (!tok) { unmatchedVideo.push(path.basename(v)); continue; }
+      const t = tracksByToken[tok];
+      if (!t) { unmatchedVideo.push(path.basename(v)); continue; }
+      matchedTrackPaths.add(t);
+      const mirrorRoot = mirrorFrom === 'tracks' ? tracksDir : videoDir;
+      const mirrorFile = mirrorFrom === 'tracks' ? t : v;
+      const rel = path.relative(mirrorRoot, mirrorFile);
+      pairs.push({ token: tok, video: v, tracks: t, outRel: rel });
+    }
+    const unmatchedTracks = tracks.filter(t => !matchedTrackPaths.has(t)).map(t => path.basename(t));
+    res.json({ pairs, unmatchedVideo, unmatchedTracks });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1716,6 +1793,10 @@ app.post('/api/test-encode', async (req, res) => {
             '--deband', variant.deband?.enabled ? '1' : '0',
             ...(variant.deband?.range ? ['--deband-range', String(variant.deband.range)] : []),
             ...(variant.deband?.threshold ? ['--deband-threshold', String(variant.deband.threshold)] : []),
+            '--encode-lossless', variant.encode_lossless === false ? '0' : '1',
+            '--hdr-to-sdr', variant.hdr_to_sdr ? '1' : '0',
+            ...(variant.hdr_to_sdr && variant.tonemap ? ['--tonemap', String(variant.tonemap)] : []),
+            ...(variant.downscale ? ['--downscale', String(variant.downscale)] : []),
             '--rename-audio', '0',
             '--overwrite', '1'
           ];
@@ -1959,7 +2040,7 @@ app.delete('/api/cleanup/work-dirs', async (req, res) => {
   }
 });
 
-app.get('/api/version', (req, res) => res.json({ version: '0.2.0-nightly.20260323', channel: 'nightly' }));
+app.get('/api/version', (req, res) => res.json({ version: '0.2.0-nightly.20260503', channel: 'nightly' }));
 
 if (fs.existsSync(frontendDist)) app.get('*', (req, res) => { if (!req.path.startsWith('/api')) res.sendFile(path.join(frontendDist, 'index.html')); });
 
